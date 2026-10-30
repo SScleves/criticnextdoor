@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>filmcat</title>
+<style>
+  :root{--bg:#121214;--panel:#1b1b1f;--line:#2a2a30;--fg:#e8e6e1;--mute:#8d8a84;--acc:#e5b53d;--seen:#4caf7d;--want:#5b9cf6;--not:#6b6b73;--radius:8px}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  header h1{font-size:18px;margin:0 12px 0 0;color:var(--acc);letter-spacing:.5px}
+  select,input[type=search],button,textarea{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font:inherit}
+  input[type=search]{min-width:220px}
+  button{cursor:pointer}
+  button.primary{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+  .stats{margin-left:auto;color:var(--mute);font-size:13px}
+  .stats b{color:var(--fg)}
+  main{padding:14px 16px 60px}
+  .count{color:var(--mute);margin-bottom:10px;font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;cursor:pointer;position:relative;transition:transform .08s}
+  .card:hover{transform:translateY(-2px);border-color:#44444c}
+  .poster{aspect-ratio:2/3;background:#26262c;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;color:var(--mute);font-size:13px}
+  .poster img{width:100%;height:100%;object-fit:cover;display:block}
+  .cap{padding:7px 8px}
+  .t{font-weight:600;font-size:13px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .s{color:var(--mute);font-size:12px;margin-top:2px}
+  .badge{position:absolute;top:6px;left:6px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;color:#fff;text-transform:uppercase;letter-spacing:.3px}
+  .badge.seen{background:var(--seen)} .badge.want{background:var(--want)} .badge.not{background:var(--not)}
+  .tier{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.75);color:var(--acc);font-size:11px;padding:2px 6px;border-radius:4px;font-weight:600}
+  .more{display:block;margin:20px auto;padding:10px 24px}
+  /* modal */
+  .ov{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto;z-index:10}
+  .ov.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(900px,100%);display:grid;grid-template-columns:220px 1fr;gap:18px;padding:18px}
+  @media(max-width:640px){.modal{grid-template-columns:1fr}}
+  .modal img{width:100%;border-radius:8px}
+  .modal h2{margin:0 0 4px;font-size:22px}
+  .meta{color:var(--mute);font-size:13px;margin-bottom:10px}
+  .ovw{font-size:14px;color:#c9c6bf;margin-bottom:14px;max-height:120px;overflow:auto}
+  .row{margin:10px 0}
+  .row label{display:block;font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+  .seg{display:flex;gap:6px}
+  .seg button{flex:1;padding:9px}
+  .seg button.on.seen{background:var(--seen);border-color:var(--seen);color:#fff}
+  .seg button.on.want{background:var(--want);border-color:var(--want);color:#fff}
+  .seg button.on.not{background:var(--not);border-color:var(--not);color:#fff}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:12px;padding:4px 9px;border-radius:14px;border:1px solid var(--line);background:var(--bg);cursor:pointer;user-select:none}
+  .chip.on{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+  .grp{font-size:11px;color:var(--mute);margin:6px 0 3px;width:100%}
+  textarea{width:100%;min-height:90px;resize:vertical}
+  .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;align-items:center}
+  .hint{color:var(--mute);font-size:12px;margin-right:auto}
+  kbd{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <h1>filmcat</h1>
+  <input type="search" id="q" placeholder="search title…">
+  <select id="genre"><option value="">all genres</option></select>
+  <select id="decade"><option value="0">all decades</option></select>
+  <select id="status">
+    <option value="">any status</option>
+    <option value="unmarked">unmarked</option>
+    <option value="seen">seen</option>
+    <option value="want">want to see</option>
+    <option value="not">not seen</option>
+  </select>
+  <select id="tier"><option value="">any tier</option></select>
+  <select id="tag"><option value="">any tag</option></select>
+  <select id="sort">
+    <option value="rating">by IMDb rating</option>
+    <option value="votes">by popularity</option>
+    <option value="year">newest first</option>
+    <option value="year_asc">oldest first</option>
+    <option value="title">A → Z</option>
+    <option value="updated">last marked</option>
+  </select>
+  <a href="/api/export.csv"><button>export my taste (CSV)</button></a>
+  <div class="stats" id="stats"></div>
+</header>
+<main>
+  <div class="count" id="count"></div>
+  <div class="grid" id="grid"></div>
+  <button class="more" id="more" style="display:none">load more</button>
+</main>
+
+<div class="ov" id="ov">
+  <div class="modal" id="modal"></div>
+</div>
+
+<script>
+const IMG = "https://image.tmdb.org/t/p/w342";
+let META, state = {offset:0, films:[], total:0}, current = null;
+
+const $ = s => document.querySelector(s);
+const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function loadMeta(){
+  META = await (await fetch("/api/meta")).json();
+  $("#genre").innerHTML += META.genres.map(g=>`<option>${g}</option>`).join("");
+  $("#decade").innerHTML += META.decades.map(d=>`<option value="${d}">${d}s</option>`).join("");
+  $("#tier").innerHTML = `<option value="">any tier</option>` + META.tiers.map(t=>`<option>${t.name}</option>`).join("");
+  $("#tag").innerHTML = `<option value="">any tag</option>` + META.tags.map(t=>`<option>${t.name}</option>`).join("");
+  const s = META.stats;
+  $("#stats").innerHTML = `<b>${s.seen}</b> seen · <b>${s.noted}</b> with notes · <b>${s.want}</b> want · ${s.total} total`;
+}
+
+function params(){
+  const p = new URLSearchParams();
+  for (const id of ["q","genre","decade","status","tier","tag","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
+  p.set("offset", state.offset); p.set("limit", 60);
+  return p;
+}
+
+async function load(reset=true){
+  if (reset) { state.offset = 0; state.films = []; }
+  const r = await (await fetch("/api/films?" + params())).json();
+  state.total = r.total; state.films = state.films.concat(r.films); state.offset += r.films.length;
+  render();
+}
+
+function card(f){
+  const poster = f.poster ? `<img loading="lazy" src="${IMG}${f.poster}" alt="">` : `<span>${esc(f.title)}<br><small>${f.year}</small></span>`;
+  const badge = f.status ? `<span class="badge ${f.status}">${f.status==="want"?"want":f.status==="not"?"not seen":"seen"}</span>` : "";
+  const tier = f.tier ? `<span class="tier">${esc(f.tier)}</span>` : "";
+  return `<div class="card" data-id="${f.tconst}">${badge}${tier}<div class="poster">${poster}</div>
+    <div class="cap"><div class="t">${esc(f.title)}</div><div class="s">${f.year} · ★ ${f.rating} · ${f.runtime||"?"} min</div></div></div>`;
+}
+
+function render(){
+  $("#count").textContent = `${state.total} films`;
+  $("#grid").innerHTML = state.films.map(card).join("");
+  $("#more").style.display = state.offset < state.total ? "block" : "none";
+}
+
+function openModal(f){
+  current = f;
+  const tags = new Set((f.tags||"").split(",").filter(Boolean));
+  const groups = {};
+  META.tags.forEach(t => (groups[t.grp] ||= []).push(t.name));
+  const chips = Object.entries(groups).map(([g, names]) =>
+    `<div class="grp">${g}</div>` + names.map(n=>`<span class="chip ${tags.has(n)?"on":""}" data-tag="${n}">${n}</span>`).join("")).join("");
+  $("#modal").innerHTML = `
+    <div>${f.poster?`<img src="${IMG}${f.poster}">`:""}
+      <div class="meta" style="margin-top:8px">IMDb ★ ${f.rating} (${(f.votes/1000|0)}k votes)<br>${esc(f.genres)}<br>${esc(f.countries||"")}</div>
+      <div class="meta" style="font-size:11px">${esc((f.keywords||"").split(",").slice(0,12).join(" · "))}</div>
+    </div>
+    <div>
+      <h2>${esc(f.title)} <span style="color:var(--mute);font-weight:400">(${f.year})</span></h2>
+      <div class="meta">${f.runtime||"?"} min · <a style="color:var(--mute)" target="_blank" href="https://www.imdb.com/title/${f.tconst}/">IMDb ↗</a></div>
+      <div class="ovw">${esc(f.overview||"")}</div>
+      <div class="row"><label>status</label>
+        <div class="seg">
+          <button class="seen ${f.status==="seen"?"on":""}" data-s="seen">seen</button>
+          <button class="want ${f.status==="want"?"on":""}" data-s="want">want to see</button>
+          <button class="not ${f.status==="not"?"on":""}" data-s="not">not seen</button>
+        </div></div>
+      <div id="seenonly" style="${f.status==="seen"?"":"display:none"}">
+        <div class="row"><label>tier</label>
+          <select id="mtier"><option value="">— pick —</option>${META.tiers.map(t=>`<option ${t.name===f.tier?"selected":""}>${t.name}</option>`).join("")}</select>
+        </div>
+        <div class="row"><label>tags (why it reached you)</label>
+          <div class="chips" id="chips">${chips}
+            <div class="grp">new</div><input type="search" id="newtag" placeholder="type a tag, Enter" style="min-width:160px;padding:4px 8px;font-size:12px">
+          </div></div>
+        <div class="row"><label>note — write it for your wife, not for the machine</label>
+          <textarea id="mnote" placeholder="Pregnant woman alone at home on Christmas Eve, someone wants the baby. You know from minute one she's screwed. French, brutal, 80 min.">${esc(f.note||"")}</textarea></div>
+      </div>
+      <div class="actions"><span class="hint"><kbd>Esc</kbd> close · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save</span>
+        <button id="close">close</button><button class="primary" id="save">save</button></div>
+    </div>`;
+  $("#ov").classList.add("open");
+  $("#modal").querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+    $("#modal").querySelectorAll(".seg button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); $("#seenonly").style.display = b.dataset.s==="seen" ? "" : "none";
+  });
+  $("#chips").onclick = e => { if (e.target.classList.contains("chip")) e.target.classList.toggle("on"); };
+  $("#newtag").onkeydown = async e => {
+    if (e.key !== "Enter" || !e.target.value.trim()) return;
+    const r = await (await fetch("/api/tag", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name:e.target.value})})).json();
+    if (!META.tags.find(t=>t.name===r.name)) META.tags.push({name:r.name, grp:"custom"});
+    e.target.insertAdjacentHTML("beforebegin", `<span class="chip on" data-tag="${r.name}">${r.name}</span>`);
+    e.target.value = "";
+  };
+  $("#close").onclick = closeModal;
+  $("#save").onclick = save;
+}
+
+function closeModal(){ $("#ov").classList.remove("open"); current = null; }
+
+async function save(){
+  const on = $("#modal").querySelector(".seg button.on");
+  const status = on ? on.dataset.s : null;
+  const body = { tconst: current.tconst, status,
+    tier: status==="seen" ? ($("#mtier").value || null) : null,
+    tags: status==="seen" ? [...$("#modal").querySelectorAll(".chip.on")].map(c=>c.dataset.tag) : [],
+    note: status==="seen" ? $("#mnote").value.trim() : null };
+  await fetch("/api/mark", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  Object.assign(current, body, {tags: body.tags.join(",")});
+  render(); closeModal(); loadMeta();
+}
+
+$("#grid").onclick = e => { const c = e.target.closest(".card"); if (c) openModal(state.films.find(f=>f.tconst===c.dataset.id)); };
+$("#more").onclick = () => load(false);
+$("#ov").onclick = e => { if (e.target.id==="ov") closeModal(); };
+document.onkeydown = e => {
+  if (!current) return;
+  if (e.key==="Escape") closeModal();
+  if (e.key==="Enter" && (e.ctrlKey||e.metaKey)) save();
+};
+["genre","decade","status","tier","tag","sort"].forEach(id => $("#"+id).onchange = () => load());
+let t; $("#q").oninput = () => { clearTimeout(t); t = setTimeout(()=>load(), 250); };
+
+loadMeta().then(()=>load());
+</script>
+</body>
+</html>
