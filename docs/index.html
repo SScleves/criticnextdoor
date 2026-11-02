@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Critic Next Door</title>
+<meta name="description" content="Front door to filmcat, the film taste catalogue running on the media server.">
+<style>
+  :root{--bg:#121214;--panel:#1b1b1f;--line:#2a2a30;--fg:#e8e6e1;--mute:#8d8a84;--acc:#e5b53d;--want:#5b9cf6}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+  main{width:min(520px,100%)}
+  h1{color:var(--acc);font-size:28px;margin:0 0 4px;letter-spacing:.5px}
+  .sub{color:var(--mute);margin:0 0 28px}
+  a.btn{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:10px 0;color:var(--fg);text-decoration:none;transition:transform .08s,border-color .08s}
+  a.btn:hover{transform:translateY(-2px);border-color:#44444c}
+  a.btn b{display:block;font-size:18px}
+  a.btn span{color:var(--mute);font-size:13px}
+  a.btn.last{border-color:var(--acc)}
+  a.btn.last span::after{content:" · last used";color:var(--acc)}
+  .foot{color:var(--mute);font-size:13px;margin-top:28px}
+  .foot a{color:var(--mute)}
+  code{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Critic Next Door</h1>
+  <p class="sub">filmcat runs on the media server, not here. Pick where you are:</p>
+
+  <a class="btn" id="home" href="http://192.168.1.8:8000/"><b>At home</b><span>same wifi as the server · 192.168.1.8:8000</span></a>
+  <a class="btn" id="away" href="http://100.112.156.159:8000/"><b>Away</b><span>over Nord Meshnet · 100.112.156.159:8000</span></a>
+
+  <p class="foot">
+    If a button doesn't load: the server is off, or you're on the wrong network for it.<br>
+    Code and docs: <a href="https://github.com/SScleves/criticnextdoor">github.com/SScleves/criticnextdoor</a>
+  </p>
+</main>
+<script>
+  // remember which door worked last; purely a convenience, nothing else is stored
+  try {
+    const last = localStorage.getItem("door");
+    if (last) document.getElementById(last)?.classList.add("last");
+    for (const id of ["home", "away"])
+      document.getElementById(id).onclick = () => { try { localStorage.setItem("door", id); } catch {} };
+  } catch {}
+</script>
+</body>
+</html>
