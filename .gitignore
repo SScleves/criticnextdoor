@@ -5,3 +5,4 @@ data/
 *.db
 my_taste.csv
 exports/
+state/
