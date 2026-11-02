@@ -2,7 +2,7 @@
 # Rebuild the online edition (docs/) from films.db + static/index.html and push it to GitHub Pages.
 #
 #   ./publish.sh              # build, commit docs/ on the current branch, push, mirror docs/ to main, push
-#   ./publish.sh --posters    # first run enrich_tmdb.py (needs TMDB_API_KEY in .env), then the above
+#   ./publish.sh --posters    # first run enrich_radarr.py (posters + scores via Radarr, no key needed), then the above
 #
 # Pages serves main/docs. The UI source lives on the working branch (phase1), so this copies the
 # built docs/ (and the build/sync scripts) onto main without merging anything else.
@@ -13,8 +13,7 @@ PY=.venv/bin/python
 branch=$(git rev-parse --abbrev-ref HEAD)
 
 if [ "${1:-}" = "--posters" ]; then
-  [ -n "${TMDB_API_KEY:-}" ] || { echo "put TMDB_API_KEY=... in .env first (free key: https://www.themoviedb.org/settings/api)"; exit 1; }
-  $PY enrich_tmdb.py
+  $PY enrich_radarr.py
 fi
 
 $PY build_static.py

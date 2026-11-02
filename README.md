@@ -20,10 +20,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python app.py              # http://localhost:8000
 ```
 
-Posters (optional). Free key: https://www.themoviedb.org/settings/api
+Posters, overviews, keywords, Rotten Tomatoes and Metacritic come from Radarr's metadata
+service, no account needed (`enrich_tmdb.py` / `enrich_omdb.py` remain as alternatives):
 
 ```bash
-TMDB_API_KEY=your_key .venv/bin/python enrich_tmdb.py     # ~25 min, safe to stop and re-run
+.venv/bin/python enrich_radarr.py     # ~35 min, safe to stop and re-run; then ./publish.sh
 ```
 
 ## Workflow
