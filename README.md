@@ -1,6 +1,8 @@
 # Critic Next Door, phase 1: the catalogue
 
-**Open it:** https://sscleves.github.io/criticnextdoor/ (front door: picks home wifi or meshnet). The app itself runs on the media server at `http://192.168.1.8:8000`.
+**Open it anywhere:** https://sscleves.github.io/criticnextdoor/ — the full app, running in the
+browser (see *Online edition*). On the home network the local server is faster and has posters
+when enriched: `http://192.168.1.8:8000`, or the door at https://sscleves.github.io/criticnextdoor/local.html.
 
 Your taste, in your words, as training data. Browse ~6,600 films that matter (IMDb's
 data), mark what you've seen, give each a tier, order the films inside a tier, tag it
@@ -99,6 +101,36 @@ OMDB_API_KEY=xxx .venv/bin/python enrich_omdb.py              # resumes where it
 ```
 
 Adds 🍅 and Metacritic to cards, "by Rotten Tomatoes" to the sort, `rt`/`metacritic` to exports.
+
+## Online edition (GitHub Pages)
+
+GitHub Pages can't run `app.py`, so `docs/` holds the same app with the server ported to the
+browser: `docs/shim.js` is `app.py` in JavaScript, running the same SQL on the same database
+(`docs/data/films.db.gz`, SQLite in WASM via sql.js). Same page, same modes, same keys.
+
+Your marks are private, so they are **not** in the public database. They live in the browser
+(always, so a reload loses nothing) and, once you give the page a token, in a **private** GitHub
+repo as `state.json`. That is what syncs laptops, and what the media server pulls.
+
+One-time setup, by hand (these need your GitHub login):
+
+1. Create a private repo, e.g. `SScleves/criticnextdoor-state`. Leave it empty.
+2. Make a fine-grained token: github.com → Settings → Developer settings → Fine-grained tokens.
+   Repository access: only that repo. Permission: Contents, read and write. Nothing else.
+3. Open the Pages app, click the gear bottom right, paste repo and token, "save & sync".
+   Repeat step 3 on each laptop. The token stays in that browser; it is sent only to api.github.com.
+
+On the media server, `python sync_state.py` pulls `state.json`, merges it into `films.db`
+(per mark the newest wins, pairs and events are unioned), pushes the merged file back and
+refreshes `exports/`. Run it whenever you marked things elsewhere, or on a timer.
+
+Rebuild and publish after the catalogue changes (setup, imports, lists, posters, scores):
+
+```bash
+.venv/bin/python build_static.py && git add docs && git commit -m "docs: rebuild" && git push
+```
+
+Pages serves `main`/`docs`, so merge or cherry-pick into `main` if you work on a branch.
 
 ## Where your words live
 
