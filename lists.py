@@ -16,7 +16,9 @@ Letterboxd does not allow automated reads of other people's lists. Use your own 
 import csv, glob, io, os, re, sqlite3, sys
 
 from app import DB, add_from_pool, event, write_exports
-from setup import migrate
+from setup import DEFAULT_CURATOR, migrate
+
+CURATOR = os.environ.get("FILMCAT_IMPORT_CURATOR", DEFAULT_CURATOR)
 
 TT = re.compile(r"tt\d{7,8}")
 STARS_TO_TIER = {5: "my favourite", 4.5: "top tier", 4: "excellent", 3.5: "very good", 3: "good",
@@ -139,7 +141,7 @@ def from_url(con, name, url):
 def letterboxd(con, folder):
     """Your own Letterboxd export (unzipped): watched -> seen, ratings -> tier, watchlist -> want, lists/*.csv -> lists."""
     res = Resolver(con)
-    marked = {r[0]: r for r in con.execute("SELECT tconst, status, tier FROM my")}
+    marked = {r[0]: r for r in con.execute("SELECT tconst, status, tier FROM marks WHERE curator=?", (CURATOR,))}
     films = {r[0] for r in con.execute("SELECT tconst FROM films")}
 
     def film(title, year):
@@ -151,12 +153,12 @@ def letterboxd(con, folder):
     def mark(t, status, tier=None, when=None):
         cur = marked.get(t)
         if cur is None:
-            con.execute("INSERT INTO my (tconst,status,tier,source,updated) VALUES (?,?,?,'letterboxd',COALESCE(?,datetime('now')))",
-                        (t, status, tier, when))
+            con.execute("""INSERT INTO marks (curator,tconst,status,tier,source,updated)
+                           VALUES (?,?,?,?,'letterboxd',COALESCE(?,datetime('now')))""", (CURATOR, t, status, tier, when))
             marked[t] = (t, status, tier)
-            event(con, "import", t, {"status": status, "tier": tier}, source="letterboxd"); return 1
+            event(con, "import", t, {"status": status, "tier": tier, "curator": CURATOR}, source="letterboxd"); return 1
         if tier and cur["tier"] is None and cur["status"] == "seen":
-            con.execute("UPDATE my SET tier=? WHERE tconst=?", (tier, t)); return 1
+            con.execute("UPDATE marks SET tier=? WHERE curator=? AND tconst=?", (tier, CURATOR, t)); return 1
         return 0
 
     n = 0
@@ -176,15 +178,19 @@ def letterboxd(con, folder):
     for p in sorted(glob.glob(os.path.join(folder, "lists", "*.csv"))):
         name = "LB: " + os.path.splitext(os.path.basename(p))[0].replace("-", " ")
         from_csv(con, name, p)
-    print(f"letterboxd: {n} marks imported (existing marks untouched)")
+    print(f"letterboxd: {n} marks imported for {CURATOR} (existing marks untouched)")
 
 
 def show(con):
-    for r in con.execute("""SELECT l.list, COUNT(*) n, SUM(m.status='seen') seen,
-                                   ROUND(AVG(CASE WHEN m.status='seen' THEN t.score END),1) avg
-                            FROM lists l LEFT JOIN my m ON m.tconst=l.tconst LEFT JOIN tiers t ON t.name=m.tier
-                            GROUP BY l.list ORDER BY l.list"""):
-        print(f"{r['list']:<32} {r['n']:>5} films   seen {r['seen'] or 0:>4}   your avg score {r['avg'] if r['avg'] is not None else '-'}")
+    curators = [r[0] for r in con.execute("SELECT id FROM curators ORDER BY ord")]
+    for r in con.execute("SELECT list, COUNT(*) n FROM lists GROUP BY list ORDER BY list"):
+        cov = []
+        for c in curators:
+            s = con.execute("""SELECT SUM(m.status='seen'), ROUND(AVG(CASE WHEN m.status='seen' THEN t.score END),1)
+                               FROM lists l JOIN marks m ON m.tconst=l.tconst AND m.curator=?
+                               LEFT JOIN tiers t ON t.name=m.tier WHERE l.list=?""", (c, r["list"])).fetchone()
+            cov.append(f"{c}: seen {s[0] or 0}" + (f", avg {s[1]}" if s[1] is not None else ""))
+        print(f"{r['list']:<28} {r['n']:>5} films   " + "   ".join(cov))
 
 
 def main():
