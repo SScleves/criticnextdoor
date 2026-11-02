@@ -6,3 +6,4 @@ data/
 my_taste.csv
 exports/
 state/
+*.db.*

@@ -446,7 +446,7 @@ function renderProgress(){
   } else {
     const rows = P[tab];
     body = `<table><tr><th>${tab}</th><th class="num">films</th><th class="num">seen</th><th class="num">tiered</th><th class="num">noted</th><th class="num">want</th><th class="num">unmarked</th><th>seen · noted</th></tr>` +
-      rows.map(r => `<tr class="link" data-f="${tab}" data-k="${esc(r.key)}"><td>${esc(tab==="decade"? r.key+"s" : r.key)}</td><td class="num">${r.total}</td><td class="num">${r.seen}</td><td class="num">${r.tiered}</td><td class="num">${r.noted}</td><td class="num">${r.want}</td><td class="num">${r.unmarked}</td>
+      rows.map(r => `<tr class="link" data-f="${tab}" data-key="${esc(r.key)}"><td>${esc(tab==="decade"? r.key+"s" : r.key)}</td><td class="num">${r.total}</td><td class="num">${r.seen}</td><td class="num">${r.tiered}</td><td class="num">${r.noted}</td><td class="num">${r.want}</td><td class="num">${r.unmarked}</td>
         <td><div class="bar"><i class="b2" style="width:${100*r.noted/r.total}%"></i><i class="b1" style="width:${100*(r.seen-r.noted)/r.total}%"></i></div></td></tr>`).join("") + "</table>" +
       (rows.length ? "" : `<div class="center">nothing here yet</div>`);
   }
@@ -458,7 +458,7 @@ function renderProgress(){
   main.querySelectorAll("[data-quick]").forEach(a => a.onclick = e => { e.preventDefault(); clearFilters(); $("#status").value = a.dataset.quick; setMode("browse"); load(); });
   main.querySelectorAll("tr.link").forEach(tr => tr.onclick = () => {
     if (tr.dataset.ladder) { state.ladderTier = tr.dataset.ladder; setMode("ladder"); return; }
-    clearFilters(); const f = tr.dataset.f, k = tr.dataset.k;
+    clearFilters(); const f = tr.dataset.f, k = tr.dataset.key;
     $("#"+({genre:"genre",decade:"decade",label:"label",list:"lst"}[f])).value = k;
     setMode("browse"); load();
   });
