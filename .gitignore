@@ -4,3 +4,4 @@ data/
 *.log
 *.db
 my_taste.csv
+exports/

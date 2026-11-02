@@ -5,19 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>filmcat</title>
 <style>
-  :root{--bg:#121214;--panel:#1b1b1f;--line:#2a2a30;--fg:#e8e6e1;--mute:#8d8a84;--acc:#e5b53d;--seen:#4caf7d;--want:#5b9cf6;--not:#6b6b73;--radius:8px}
+  :root{--bg:#121214;--panel:#1b1b1f;--line:#2a2a30;--fg:#e8e6e1;--mute:#8d8a84;--acc:#e5b53d;--neg:#d9534f;--seen:#4caf7d;--want:#5b9cf6;--not:#6b6b73;--radius:8px}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   header h1{font-size:18px;margin:0 12px 0 0;color:var(--acc);letter-spacing:.5px}
   select,input[type=search],button,textarea{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font:inherit}
-  input[type=search]{min-width:220px}
+  input[type=search]{min-width:200px}
   button{cursor:pointer}
   button.primary{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+  .modes{display:flex;gap:4px;margin-right:6px}
+  .modes button.on{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+  #filters{display:contents}
+  label.chk{display:flex;align-items:center;gap:5px;color:var(--mute);font-size:13px;cursor:pointer}
   .stats{margin-left:auto;color:var(--mute);font-size:13px}
   .stats b{color:var(--fg)}
   main{padding:14px 16px 60px}
-  .count{color:var(--mute);margin-bottom:10px;font-size:13px}
+  .count{color:var(--mute);margin-bottom:10px;font-size:13px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;cursor:pointer;position:relative;transition:transform .08s}
   .card:hover{transform:translateY(-2px);border-color:#44444c}
@@ -26,10 +30,29 @@
   .cap{padding:7px 8px}
   .t{font-weight:600;font-size:13px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
   .s{color:var(--mute);font-size:12px;margin-top:2px}
-  .badge{position:absolute;top:6px;left:6px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;color:#fff;text-transform:uppercase;letter-spacing:.3px}
+  .d{color:var(--mute);font-size:11px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lib{color:#7fb3e6}
+  .badge{position:absolute;top:6px;left:6px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;color:#fff;text-transform:uppercase;letter-spacing:.3px;z-index:1}
   .badge.seen{background:var(--seen)} .badge.want{background:var(--want)} .badge.not{background:var(--not)}
-  .tier{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.75);color:var(--acc);font-size:11px;padding:2px 6px;border-radius:4px;font-weight:600}
+  .tier{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.75);color:var(--acc);font-size:11px;padding:2px 6px;border-radius:4px;font-weight:600;z-index:1}
   .more{display:block;margin:20px auto;padding:10px 24px}
+  .center{text-align:center;color:var(--mute);margin:14px 0}
+  kbd{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px}
+  /* pool */
+  .pool .item{display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .pool .item span{color:var(--mute)}
+  .pool .item button{margin-left:auto}
+  /* triage */
+  .one{max-width:760px;margin:0 auto;display:grid;grid-template-columns:220px 1fr;gap:18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  @media(max-width:640px){.one{grid-template-columns:1fr}}
+  .one .poster{border-radius:8px;overflow:hidden}
+  .keys{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .keys button{padding:10px 14px}
+  .keys button.seen{border-color:var(--seen)} .keys button.want{border-color:var(--want)}
+  /* compare */
+  .duel{display:grid;grid-template-columns:minmax(0,320px) auto minmax(0,320px);gap:18px;max-width:900px;margin:0 auto;align-items:center;justify-content:center}
+  .vs{color:var(--mute);font-size:22px}
+  @media(max-width:640px){.duel{grid-template-columns:1fr;} .vs{text-align:center}}
   /* modal */
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto;z-index:10}
   .ov.open{display:flex}
@@ -46,47 +69,55 @@
   .seg button.on.seen{background:var(--seen);border-color:var(--seen);color:#fff}
   .seg button.on.want{background:var(--want);border-color:var(--want);color:#fff}
   .seg button.on.not{background:var(--not);border-color:var(--not);color:#fff}
+  .small{display:flex;gap:8px;flex-wrap:wrap} .small select{flex:1;min-width:150px}
   .chips{display:flex;flex-wrap:wrap;gap:6px}
   .chip{font-size:12px;padding:4px 9px;border-radius:14px;border:1px solid var(--line);background:var(--bg);cursor:pointer;user-select:none}
   .chip.on{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+  .chip.on::before{content:"+ "}
+  .chip.neg{background:var(--neg);color:#fff;border-color:var(--neg);font-weight:600}
+  .chip.neg::before{content:"− "}
   .grp{font-size:11px;color:var(--mute);margin:6px 0 3px;width:100%}
-  textarea{width:100%;min-height:90px;resize:vertical}
+  textarea{width:100%;min-height:110px;resize:vertical}
   .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;align-items:center}
   .hint{color:var(--mute);font-size:12px;margin-right:auto}
-  kbd{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px}
 </style>
 </head>
 <body>
 <header>
   <h1>filmcat</h1>
-  <input type="search" id="q" placeholder="search title…">
-  <select id="genre"><option value="">all genres</option></select>
-  <select id="decade"><option value="0">all decades</option></select>
-  <select id="status">
-    <option value="">any status</option>
-    <option value="unmarked">unmarked</option>
-    <option value="seen">seen</option>
-    <option value="want">want to see</option>
-    <option value="not">not seen</option>
-  </select>
-  <select id="tier"><option value="">any tier</option></select>
-  <select id="tag"><option value="">any tag</option></select>
-  <select id="sort">
-    <option value="rating">by IMDb rating</option>
-    <option value="votes">by popularity</option>
-    <option value="year">newest first</option>
-    <option value="year_asc">oldest first</option>
-    <option value="title">A → Z</option>
-    <option value="updated">last marked</option>
-  </select>
-  <a href="/api/export.csv"><button>export my taste (CSV)</button></a>
+  <div class="modes">
+    <button data-m="browse" class="on" title="grid, click a poster">browse</button>
+    <button data-m="triage" title="one film at a time, keyboard: S W N → ←">triage</button>
+    <button data-m="compare" title="which did you like more? ← → ↓">compare</button>
+  </div>
+  <div id="filters">
+    <input type="search" id="q" placeholder="title or director…">
+    <select id="genre"><option value="">all genres</option></select>
+    <select id="decade"><option value="0">all decades</option></select>
+    <select id="status">
+      <option value="">any status</option>
+      <option value="unmarked">unmarked</option>
+      <option value="seen">seen</option>
+      <option value="want">want to see</option>
+      <option value="not">not seen</option>
+    </select>
+    <select id="tier"><option value="">any tier</option></select>
+    <select id="tag"><option value="">any tag</option></select>
+    <select id="sort">
+      <option value="rating">by IMDb rating</option>
+      <option value="votes">by popularity</option>
+      <option value="year">newest first</option>
+      <option value="year_asc">oldest first</option>
+      <option value="title">A → Z</option>
+      <option value="updated">last marked</option>
+      <option value="random">shuffle</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="lib"> in my library</label>
+  </div>
+  <a href="/api/export.csv"><button>export CSV</button></a>
   <div class="stats" id="stats"></div>
 </header>
-<main>
-  <div class="count" id="count"></div>
-  <div class="grid" id="grid"></div>
-  <button class="more" id="more" style="display:none">load more</button>
-</main>
+<main id="main"></main>
 
 <div class="ov" id="ov">
   <div class="modal" id="modal"></div>
@@ -94,33 +125,53 @@
 
 <script>
 const IMG = "https://image.tmdb.org/t/p/w342";
-let META, state = {offset:0, films:[], total:0}, current = null;
+let META, state = {mode:"browse", offset:0, films:[], total:0, i:0, pair:null, pairs:0}, current = null, advance = false;
 
 const $ = s => document.querySelector(s);
-const esc = s => (s||"").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const api = async (url, body) => (await fetch(url, body ? {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)} : undefined)).json();
+const TIMES = {once:"once", few:"a few times", many:"many times"};
+const WHEN = {recent:"recently", years:"years ago", kid:"as a kid / teen"};
+const MEMORY = {clear:"remember it clearly", fuzzy:"fuzzy memory"};
 
 async function loadMeta(){
-  META = await (await fetch("/api/meta")).json();
-  $("#genre").innerHTML += META.genres.map(g=>`<option>${g}</option>`).join("");
-  $("#decade").innerHTML += META.decades.map(d=>`<option value="${d}">${d}s</option>`).join("");
+  META = await api("/api/meta");
+  const keep = id => $("#"+id).value;
+  const g = keep("genre"), d = keep("decade"), ti = keep("tier"), ta = keep("tag");
+  $("#genre").innerHTML = `<option value="">all genres</option>` + META.genres.map(x=>`<option>${x}</option>`).join("");
+  $("#decade").innerHTML = `<option value="0">all decades</option>` + META.decades.map(x=>`<option value="${x}">${x}s</option>`).join("");
   $("#tier").innerHTML = `<option value="">any tier</option>` + META.tiers.map(t=>`<option>${t.name}</option>`).join("");
   $("#tag").innerHTML = `<option value="">any tag</option>` + META.tags.map(t=>`<option>${t.name}</option>`).join("");
-  const s = META.stats;
-  $("#stats").innerHTML = `<b>${s.seen}</b> seen · <b>${s.noted}</b> with notes · <b>${s.want}</b> want · ${s.total} total`;
+  $("#genre").value = g; $("#decade").value = d; $("#tier").value = ti; $("#tag").value = ta;
+  const s = META.stats; state.pairs = s.pairs;
+  $("#stats").innerHTML = `<b>${s.seen}</b> seen · <b>${s.tiered}</b> tiered · <b>${s.noted}</b> with notes · <b>${s.pairs}</b> compared · <b>${s.want}</b> want · ${s.total} total`;
 }
 
 function params(){
   const p = new URLSearchParams();
   for (const id of ["q","genre","decade","status","tier","tag","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
+  if ($("#lib").checked) p.set("library", "1");
   p.set("offset", state.offset); p.set("limit", 60);
   return p;
 }
 
 async function load(reset=true){
-  if (reset) { state.offset = 0; state.films = []; }
-  const r = await (await fetch("/api/films?" + params())).json();
+  if (reset) { state.offset = 0; state.films = []; state.i = 0; }
+  const r = await api("/api/films?" + params());
   state.total = r.total; state.films = state.films.concat(r.films); state.offset += r.films.length;
   render();
+}
+
+// a film marked while the "unmarked" filter is on drops out of the server's list: keep offsets honest
+function marked(f){
+  if (!f._marked && $("#status").value === "unmarked") { f._marked = true; state.offset = Math.max(0, state.offset - 1); }
+}
+
+function setMode(m){
+  state.mode = m;
+  document.querySelectorAll(".modes button").forEach(b => b.classList.toggle("on", b.dataset.m === m));
+  $("#filters").style.display = m === "compare" ? "none" : "";
+  if (m === "compare") loadPair(); else render();
 }
 
 function card(f){
@@ -128,30 +179,114 @@ function card(f){
   const badge = f.status ? `<span class="badge ${f.status}">${f.status==="want"?"want":f.status==="not"?"not seen":"seen"}</span>` : "";
   const tier = f.tier ? `<span class="tier">${esc(f.tier)}</span>` : "";
   return `<div class="card" data-id="${f.tconst}">${badge}${tier}<div class="poster">${poster}</div>
-    <div class="cap"><div class="t">${esc(f.title)}</div><div class="s">${f.year} · ★ ${f.rating} · ${f.runtime||"?"} min</div></div></div>`;
+    <div class="cap"><div class="t">${esc(f.title)}</div>
+    <div class="s">${f.year} · ★ ${f.rating} · ${f.runtime||"?"} min${f.in_library?' · <span class="lib" title="in your library">●</span>':''}</div>
+    <div class="d">${esc(f.directors||"")}</div></div></div>`;
 }
 
 function render(){
-  $("#count").textContent = `${state.total} films`;
-  $("#grid").innerHTML = state.films.map(card).join("");
-  $("#more").style.display = state.offset < state.total ? "block" : "none";
+  if (state.mode === "browse") renderGrid();
+  else if (state.mode === "triage") renderOne();
+  else renderPair();
 }
 
-function openModal(f){
-  current = f;
-  const tags = new Set((f.tags||"").split(",").filter(Boolean));
+function renderGrid(){
+  const q = $("#q").value.trim();
+  $("#main").innerHTML = `<div class="count"><span>${state.total} films</span>
+      ${q ? `<button id="poolbtn">not here? search all of IMDb for “${esc(q)}”</button>` : ""}</div>
+    <div class="pool" id="pool"></div>
+    <div class="grid">${state.films.map(card).join("")}</div>
+    ${state.offset < state.total ? `<button class="more" id="more">load more</button>` : ""}`;
+}
+
+async function poolSearch(){
+  const q = $("#q").value.trim(); if (!q) return;
+  const r = await api("/api/pool?q=" + encodeURIComponent(q));
+  $("#pool").innerHTML = r.films.length ? r.films.map(f =>
+    `<div class="item"><b>${esc(f.title)}</b> (${f.year}) <span>★ ${f.rating} · ${(f.votes/1000|0)}k votes · ${esc(f.directors||"")}</span>
+     <button data-add="${f.tconst}">+ add</button></div>`).join("")
+    : `<div class="center">nothing in the IMDb pool either (films with ≥1000 votes)</div>`;
+}
+
+async function addFilm(tconst){
+  const f = await api("/api/add", {tconst});
+  state.films.unshift(f); state.total++;
+  render(); openModal(f);
+}
+
+// ---- triage: one film at a time -------------------------------------------
+function renderOne(){
+  const f = state.films[state.i], main = $("#main");
+  if (!f) {
+    if (state.offset < state.total) { main.innerHTML = `<div class="center">loading…</div>`; load(false); return; }
+    main.innerHTML = `<div class="center">nothing left with these filters.<br><br>change the filters above, or switch to <b>compare</b>.</div>`; return;
+  }
+  const poster = f.poster ? `<img src="${IMG}${f.poster}" alt="" style="width:100%;border-radius:8px">` : `<div class="poster"><span>${esc(f.title)}<br><small>${f.year}</small></span></div>`;
+  main.innerHTML = `<div class="count" style="justify-content:center">${state.i+1} / ${state.total}${f.status ? ` · already marked <b>${f.status}</b>` : ""}</div>
+    <div class="one"><div>${poster}</div><div>
+      <h2 style="margin:0 0 4px">${esc(f.title)} <span style="color:var(--mute);font-weight:400">(${f.year})</span></h2>
+      <div class="meta">${esc(f.directors||"")}<br>${esc(f.genres)} · ${f.runtime||"?"} min · IMDb ★ ${f.rating} (${(f.votes/1000|0)}k)${f.in_library?' · <span class="lib">● in your library</span>':''}</div>
+      <div class="ovw">${esc(f.overview||"")}</div>
+      <div class="keys">
+        <button class="seen" data-k="s"><kbd>S</kbd> seen → write it up</button>
+        <button class="want" data-k="w"><kbd>W</kbd> want to see</button>
+        <button data-k="n"><kbd>N</kbd> not seen</button>
+        <button data-k="skip"><kbd>→</kbd> skip</button>
+        <button data-k="back"><kbd>←</kbd> back</button>
+      </div></div></div>`;
+}
+
+async function triage(k){
+  const f = state.films[state.i]; if (!f) return;
+  if (k === "back") { state.i = Math.max(0, state.i - 1); renderOne(); return; }
+  if (k === "skip") { next(); return; }
+  if (k === "s") { openModal(f, true); return; }
+  const status = k === "w" ? "want" : "not";
+  await api("/api/mark", {tconst: f.tconst, status, tags: []});
+  Object.assign(f, {status, tier:null, tags:"", note:null, times:null, when_seen:null, memory:null});
+  marked(f); loadMeta(); next();
+}
+
+function next(){
+  state.i++;
+  if (state.i >= state.films.length - 5 && state.offset < state.total) load(false); else renderOne();
+}
+
+// ---- compare: which did you like more? ------------------------------------
+async function loadPair(){ state.pair = await api("/api/pair"); renderPair(); }
+
+function renderPair(){
+  const p = state.pair, main = $("#main");
+  if (!p || !p.a) { main.innerHTML = `<div class="center">${p ? esc(p.reason) : "…"}</div>`; return; }
+  const side = f => `${card(f)}<div class="center" style="margin:6px 0 0;font-size:12px">${f.tier ? esc(f.tier) : "no tier yet"}</div>`;
+  main.innerHTML = `<div class="center">which one did you like more? <kbd>←</kbd> left · <kbd>→</kbd> right · <kbd>↓</kbd> can't say &nbsp;·&nbsp; <b>${state.pairs}</b> compared</div>
+    <div class="duel"><div data-pick="a">${side(p.a)}</div><div class="vs">vs</div><div data-pick="b">${side(p.b)}</div></div>`;
+}
+
+async function pick(which){
+  const p = state.pair; if (!p || !p.a) return;
+  const r = await api("/api/pair", {a: p.a.tconst, b: p.b.tconst, winner: which === "a" ? p.a.tconst : which === "b" ? p.b.tconst : null});
+  state.pairs = r.pairs; loadPair();
+}
+
+// ---- modal: the write-up ---------------------------------------------------
+function openModal(f, adv=false){
+  current = f; advance = adv;
+  const all = (f.tags||"").split(",").filter(Boolean);
+  const pos = new Set(all.filter(t=>!t.startsWith("-"))), neg = new Set(all.filter(t=>t.startsWith("-")).map(t=>t.slice(1)));
   const groups = {};
   META.tags.forEach(t => (groups[t.grp] ||= []).push(t.name));
   const chips = Object.entries(groups).map(([g, names]) =>
-    `<div class="grp">${g}</div>` + names.map(n=>`<span class="chip ${tags.has(n)?"on":""}" data-tag="${n}">${n}</span>`).join("")).join("");
+    `<div class="grp">${g}</div>` + names.map(n=>`<span class="chip ${pos.has(n)?"on":neg.has(n)?"neg":""}" data-tag="${n}">${n}</span>`).join("")).join("");
+  const opts = (map, cur, blank) => `<option value="">${blank}</option>` + Object.entries(map).map(([k,v])=>`<option value="${k}" ${k===cur?"selected":""}>${v}</option>`).join("");
   $("#modal").innerHTML = `
     <div>${f.poster?`<img src="${IMG}${f.poster}">`:""}
-      <div class="meta" style="margin-top:8px">IMDb ★ ${f.rating} (${(f.votes/1000|0)}k votes)<br>${esc(f.genres)}<br>${esc(f.countries||"")}</div>
+      <div class="meta" style="margin-top:8px">${esc(f.directors||"")}<br>IMDb ★ ${f.rating} (${(f.votes/1000|0)}k votes)<br>${esc(f.genres)}<br>${esc(f.countries||"")}${f.in_library?'<br><span class="lib">● in your library</span>':''}</div>
       <div class="meta" style="font-size:11px">${esc((f.keywords||"").split(",").slice(0,12).join(" · "))}</div>
     </div>
     <div>
       <h2>${esc(f.title)} <span style="color:var(--mute);font-weight:400">(${f.year})</span></h2>
-      <div class="meta">${f.runtime||"?"} min · <a style="color:var(--mute)" target="_blank" href="https://www.imdb.com/title/${f.tconst}/">IMDb ↗</a></div>
+      <div class="meta">${f.runtime||"?"} min · <a style="color:var(--mute)" target="_blank" href="https://www.imdb.com/title/${f.tconst}/">IMDb ↗</a>${f.source==="tautulli"?' · <span title="imported from Plex watch history">seen per Plex</span>':''}</div>
       <div class="ovw">${esc(f.overview||"")}</div>
       <div class="row"><label>status</label>
         <div class="seg">
@@ -163,11 +298,16 @@ function openModal(f){
         <div class="row"><label>tier</label>
           <select id="mtier"><option value="">— pick —</option>${META.tiers.map(t=>`<option ${t.name===f.tier?"selected":""}>${t.name}</option>`).join("")}</select>
         </div>
-        <div class="row"><label>tags (why it reached you)</label>
+        <div class="row"><label>how it sits with you</label><div class="small">
+          <select id="mtimes">${opts(TIMES, f.times, "seen how often?")}</select>
+          <select id="mwhen">${opts(WHEN, f.when_seen, "when?")}</select>
+          <select id="mmemory">${opts(MEMORY, f.memory, "how well do you remember it?")}</select>
+        </div></div>
+        <div class="row"><label>tags — click once: <span style="color:var(--acc)">+ this is why it worked</span>, twice: <span style="color:var(--neg)">− this is what went wrong</span>, thrice: off</label>
           <div class="chips" id="chips">${chips}
             <div class="grp">new</div><input type="search" id="newtag" placeholder="type a tag, Enter" style="min-width:160px;padding:4px 8px;font-size:12px">
           </div></div>
-        <div class="row"><label>note — write it for your wife, not for the machine</label>
+        <div class="row"><label>note — in your words. what it did to you, why it worked or didn't. write it for your wife, not for the machine</label>
           <textarea id="mnote" placeholder="Pregnant woman alone at home on Christmas Eve, someone wants the baby. You know from minute one she's screwed. French, brutal, 80 min.">${esc(f.note||"")}</textarea></div>
       </div>
       <div class="actions"><span class="hint"><kbd>Esc</kbd> close · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save</span>
@@ -177,43 +317,73 @@ function openModal(f){
   $("#modal").querySelectorAll(".seg button").forEach(b => b.onclick = () => {
     $("#modal").querySelectorAll(".seg button").forEach(x=>x.classList.remove("on"));
     b.classList.add("on"); $("#seenonly").style.display = b.dataset.s==="seen" ? "" : "none";
+    if (b.dataset.s === "seen") $("#mtier").focus();
   });
-  $("#chips").onclick = e => { if (e.target.classList.contains("chip")) e.target.classList.toggle("on"); };
+  $("#chips").onclick = e => {
+    const c = e.target; if (!c.classList.contains("chip")) return;
+    if (c.classList.contains("on")) { c.classList.remove("on"); c.classList.add("neg"); }
+    else if (c.classList.contains("neg")) c.classList.remove("neg");
+    else c.classList.add("on");
+  };
   $("#newtag").onkeydown = async e => {
     if (e.key !== "Enter" || !e.target.value.trim()) return;
-    const r = await (await fetch("/api/tag", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name:e.target.value})})).json();
+    e.preventDefault();
+    const r = await api("/api/tag", {name: e.target.value});
     if (!META.tags.find(t=>t.name===r.name)) META.tags.push({name:r.name, grp:"custom"});
-    e.target.insertAdjacentHTML("beforebegin", `<span class="chip on" data-tag="${r.name}">${r.name}</span>`);
+    if (!$("#chips").querySelector(`[data-tag="${r.name}"]`))
+      e.target.insertAdjacentHTML("beforebegin", `<span class="chip on" data-tag="${r.name}">${r.name}</span>`);
     e.target.value = "";
   };
   $("#close").onclick = closeModal;
   $("#save").onclick = save;
+  if (adv && f.status !== "seen") $("#modal").querySelector('[data-s="seen"]').click();
 }
 
 function closeModal(){ $("#ov").classList.remove("open"); current = null; }
 
 async function save(){
+  const f = current; if (!f) return;
   const on = $("#modal").querySelector(".seg button.on");
-  const status = on ? on.dataset.s : null;
-  const body = { tconst: current.tconst, status,
-    tier: status==="seen" ? ($("#mtier").value || null) : null,
-    tags: status==="seen" ? [...$("#modal").querySelectorAll(".chip.on")].map(c=>c.dataset.tag) : [],
-    note: status==="seen" ? $("#mnote").value.trim() : null };
-  await fetch("/api/mark", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
-  Object.assign(current, body, {tags: body.tags.join(",")});
-  render(); closeModal(); loadMeta();
+  const status = on ? on.dataset.s : null, seen = status === "seen";
+  const m = $("#modal");
+  const body = { tconst: f.tconst, status,
+    tier: seen ? (m.querySelector("#mtier").value || null) : null,
+    tags: seen ? [...m.querySelectorAll(".chip.on")].map(c=>c.dataset.tag).concat([...m.querySelectorAll(".chip.neg")].map(c=>"-"+c.dataset.tag)) : [],
+    note: seen ? m.querySelector("#mnote").value.trim() : null,
+    times: seen ? (m.querySelector("#mtimes").value || null) : null,
+    when_seen: seen ? (m.querySelector("#mwhen").value || null) : null,
+    memory: seen ? (m.querySelector("#mmemory").value || null) : null };
+  await api("/api/mark", body);
+  Object.assign(f, body, {tags: body.tags.join(","), source: "me"});
+  if (status) marked(f);
+  const adv = advance; closeModal(); loadMeta();
+  if (adv && state.mode === "triage") next(); else render();
 }
 
-$("#grid").onclick = e => { const c = e.target.closest(".card"); if (c) openModal(state.films.find(f=>f.tconst===c.dataset.id)); };
-$("#more").onclick = () => load(false);
+// ---- wiring ----------------------------------------------------------------
+$("#main").onclick = e => {
+  const pk = e.target.closest("[data-pick]"); if (pk) { pick(pk.dataset.pick); return; }
+  const k = e.target.closest("[data-k]"); if (k) { triage(k.dataset.k); return; }
+  if (e.target.id === "more") { load(false); return; }
+  if (e.target.id === "poolbtn") { poolSearch(); return; }
+  const add = e.target.closest("[data-add]"); if (add) { addFilm(add.dataset.add); return; }
+  const c = e.target.closest(".card"); if (c) openModal(state.films.find(f=>f.tconst===c.dataset.id));
+};
+document.querySelectorAll(".modes button").forEach(b => b.onclick = () => setMode(b.dataset.m));
 $("#ov").onclick = e => { if (e.target.id==="ov") closeModal(); };
 document.onkeydown = e => {
-  if (!current) return;
-  if (e.key==="Escape") closeModal();
-  if (e.key==="Enter" && (e.ctrlKey||e.metaKey)) save();
+  const typing = ["INPUT","TEXTAREA","SELECT"].includes(e.target.tagName);
+  if (current) {
+    if (e.key === "Escape") closeModal();
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) save();
+    return;
+  }
+  if (typing) return;
+  if (state.mode === "triage") { const k = {s:"s",S:"s",w:"w",W:"w",n:"n",N:"n",ArrowRight:"skip",ArrowLeft:"back"}[e.key]; if (k) { e.preventDefault(); triage(k); } }
+  if (state.mode === "compare") { const k = {ArrowLeft:"a",ArrowRight:"b",ArrowDown:"skip"}[e.key]; if (k) { e.preventDefault(); pick(k); } }
 };
-["genre","decade","status","tier","tag","sort"].forEach(id => $("#"+id).onchange = () => load());
-let t; $("#q").oninput = () => { clearTimeout(t); t = setTimeout(()=>load(), 250); };
+["genre","decade","status","tier","tag","sort","lib"].forEach(id => $("#"+id).onchange = () => load());
+let deb; $("#q").oninput = () => { clearTimeout(deb); deb = setTimeout(()=>load(), 250); };
 
 loadMeta().then(()=>load());
 </script>

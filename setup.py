@@ -1,42 +1,83 @@
 #!/usr/bin/env python3
 """
-Step 1: build films.db from IMDb's official datasets.
+Step 1: build (or refresh) films.db from IMDb's official datasets.
 
-Downloads title.basics + title.ratings (free, ~300 MB), keeps feature films
-with enough votes to matter, and writes them to films.db.
+Downloads title.basics, title.ratings, title.crew and name.basics (~630 MB)
+and writes two tables:
+  films  - the catalogue you browse (>= --min-votes votes, >= --min-rating)
+  pool   - every other feature film with >= --pool-votes votes, so anything the
+           filter left out can be added from inside the app, no network needed
+
+Safe to re-run: film data (ratings, crew) is refreshed in place; your marks
+(my / events / pairs) are never touched.
 
 Usage:
-    python setup.py                 # default: movies with >= 20000 votes, rating >= 6.0
+    python setup.py
     python setup.py --min-votes 50000 --min-rating 6.5
-    python setup.py --tsv-dir data  # reuse already-downloaded .tsv.gz files
 """
-import argparse, csv, gzip, os, sqlite3, sys, urllib.request
+import argparse, csv, gzip, os, sqlite3, urllib.request
 
+HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = "https://datasets.imdbws.com/"
-FILES = ["title.basics.tsv.gz", "title.ratings.tsv.gz"]
-DB = "films.db"
+FILES = ["title.basics.tsv.gz", "title.ratings.tsv.gz", "title.crew.tsv.gz", "name.basics.tsv.gz"]
+DB = os.path.join(HERE, "films.db")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS films (
   tconst TEXT PRIMARY KEY,
   title TEXT, original_title TEXT, year INTEGER, decade INTEGER,
   runtime INTEGER, genres TEXT, rating REAL, votes INTEGER,
+  directors TEXT, writers TEXT,
   tmdb_id INTEGER, poster TEXT, backdrop TEXT, overview TEXT,
-  keywords TEXT, countries TEXT, language TEXT
+  keywords TEXT, countries TEXT, language TEXT,
+  in_library INTEGER DEFAULT 0,   -- 1 = Radarr has the file
+  added TEXT                      -- how it got here: filter | pool | tautulli | radarr
 );
-CREATE TABLE IF NOT EXISTS my (
+CREATE TABLE IF NOT EXISTS pool (
+  tconst TEXT PRIMARY KEY,
+  title TEXT, original_title TEXT, year INTEGER, runtime INTEGER, genres TEXT,
+  rating REAL, votes INTEGER, directors TEXT, writers TEXT
+);
+CREATE TABLE IF NOT EXISTS my (          -- current state, one row per film
   tconst TEXT PRIMARY KEY REFERENCES films(tconst),
   status TEXT,          -- seen | not | want
   tier TEXT,            -- see tiers table
-  tags TEXT,            -- comma-separated
-  note TEXT,
+  tags TEXT,            -- comma-separated; "-tag" means "this is what went wrong"
+  note TEXT,            -- your words
+  times TEXT,           -- once | few | many
+  when_seen TEXT,       -- recent | years | kid
+  memory TEXT,          -- clear | fuzzy
+  source TEXT,          -- me | tautulli
   updated TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS events (      -- append-only: every change, forever
+  id INTEGER PRIMARY KEY,
+  ts TEXT DEFAULT (datetime('now')),
+  kind TEXT,            -- mark | pair | add | import
+  tconst TEXT,
+  payload TEXT,         -- json
+  source TEXT
+);
+CREATE TABLE IF NOT EXISTS pairs (       -- "which did you like more?" answers
+  id INTEGER PRIMARY KEY,
+  ts TEXT DEFAULT (datetime('now')),
+  a TEXT, b TEXT,
+  winner TEXT,          -- a or b's tconst; NULL = couldn't say
+  skipped INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS tiers (name TEXT PRIMARY KEY, score INTEGER, ord INTEGER);
 CREATE TABLE IF NOT EXISTS tags (name TEXT PRIMARY KEY, grp TEXT);
 CREATE INDEX IF NOT EXISTS idx_films_decade ON films(decade);
 CREATE INDEX IF NOT EXISTS idx_films_rating ON films(rating);
+CREATE INDEX IF NOT EXISTS idx_pool_title ON pool(title);
+CREATE INDEX IF NOT EXISTS idx_events_tconst ON events(tconst);
 """
+
+# columns added after the first release; ALTERed in when an older films.db lacks them
+MIGRATIONS = {
+    "films": ["directors TEXT", "writers TEXT", "in_library INTEGER DEFAULT 0", "added TEXT"],
+    "my": ["times TEXT", "when_seen TEXT", "memory TEXT", "source TEXT"],
+}
 
 TIERS = [  # (name, score, order)  score feeds the recommender, name is what you see
     ("my favourite", 10, 1), ("top tier", 9, 2), ("excellent", 8, 3),
@@ -62,6 +103,19 @@ TAGS = [  # starter vocabulary; add/edit in the app
 ]
 
 
+def migrate(con):
+    """Create anything missing. Called by setup and by the app on start."""
+    con.executescript(SCHEMA)
+    for table, cols in MIGRATIONS.items():
+        have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+        for c in cols:
+            if c.split()[0] not in have:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {c}")
+    con.executemany("INSERT OR IGNORE INTO tiers VALUES (?,?,?)", TIERS)
+    con.executemany("INSERT OR IGNORE INTO tags VALUES (?,?)", TAGS)
+    con.commit()
+
+
 def download(name, dest_dir):
     os.makedirs(dest_dir, exist_ok=True)
     path = os.path.join(dest_dir, name)
@@ -79,54 +133,95 @@ def read_tsv(path):
         yield from csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE)
 
 
+def nn(v):
+    return None if v == "\\N" else v
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-votes", type=int, default=20000)
     ap.add_argument("--min-rating", type=float, default=6.0)
-    ap.add_argument("--tsv-dir", default="data")
+    ap.add_argument("--pool-votes", type=int, default=1000)
+    ap.add_argument("--tsv-dir", default=os.path.join(HERE, "data"))
     ap.add_argument("--db", default=DB)
     a = ap.parse_args()
 
-    print("1/3 datasets")
+    print("1/5 datasets")
     paths = {n: download(n, a.tsv_dir) for n in FILES}
 
-    print("2/3 ratings (streaming)")
+    print("2/5 ratings")
     keep = {}
     for r in read_tsv(paths["title.ratings.tsv.gz"]):
         v = int(r["numVotes"]); s = float(r["averageRating"])
-        if v >= a.min_votes and s >= a.min_rating:
+        if v >= a.pool_votes:
             keep[r["tconst"]] = (s, v)
-    print(f"  {len(keep)} titles pass the vote/rating filter")
+    print(f"  {len(keep)} titles with >= {a.pool_votes} votes")
 
-    print("3/3 basics (streaming, this is the big one: ~2 minutes)")
-    rows = []
+    print("3/5 basics (~2 minutes)")
+    films, pool = {}, {}
     for r in read_tsv(paths["title.basics.tsv.gz"]):
         t = r["tconst"]
-        if t not in keep or r["titleType"] != "movie":
+        if t not in keep or r["titleType"] != "movie" or r["startYear"] == "\\N":
             continue
-        if r["startYear"] == "\\N":
-            continue
-        y = int(r["startYear"])
-        rt = None if r["runtimeMinutes"] == "\\N" else int(r["runtimeMinutes"])
-        genres = "" if r["genres"] == "\\N" else r["genres"]
+        genres = nn(r["genres"]) or ""
         if genres == "Documentary":
             continue
-        rows.append((t, r["primaryTitle"], r["originalTitle"], y, y // 10 * 10,
-                     rt, genres, keep[t][0], keep[t][1]))
-    print(f"  {len(rows)} feature films")
+        y = int(r["startYear"]); s, v = keep[t]
+        row = dict(tconst=t, title=r["primaryTitle"], original_title=r["originalTitle"], year=y,
+                   runtime=int(nn(r["runtimeMinutes"]) or 0) or None, genres=genres, rating=s, votes=v)
+        pool[t] = row
+        if v >= a.min_votes and s >= a.min_rating:
+            films[t] = row
+    print(f"  {len(films)} films pass the filter, {len(pool)} in the pool")
 
+    print("4/5 crew + names (~4 minutes)")
+    crew, need = {}, set()
+    for r in read_tsv(paths["title.crew.tsv.gz"]):
+        if r["tconst"] in pool:
+            d = (nn(r["directors"]) or "").split(",")[:3]
+            w = (nn(r["writers"]) or "").split(",")[:3]
+            crew[r["tconst"]] = ([x for x in d if x], [x for x in w if x])
+            need.update(crew[r["tconst"]][0]); need.update(crew[r["tconst"]][1])
+    names = {}
+    with gzip.open(paths["name.basics.tsv.gz"], "rt", encoding="utf-8") as f:
+        next(f)
+        for line in f:
+            nconst, name = line.split("\t", 2)[:2]
+            if nconst in need:
+                names[nconst] = name
+    for t, row in pool.items():
+        d, w = crew.get(t, ([], []))
+        row["directors"] = ", ".join(names[x] for x in d if x in names)
+        row["writers"] = ", ".join(names[x] for x in w if x in names)
+    print(f"  {len(names)} people")
+
+    print("5/5 writing")
     con = sqlite3.connect(a.db)
-    con.executescript(SCHEMA)
-    con.executemany("""INSERT OR IGNORE INTO films
-        (tconst,title,original_title,year,decade,runtime,genres,rating,votes)
-        VALUES (?,?,?,?,?,?,?,?,?)""", rows)
-    con.executemany("INSERT OR IGNORE INTO tiers VALUES (?,?,?)", TIERS)
-    con.executemany("INSERT OR IGNORE INTO tags VALUES (?,?)", TAGS)
+    migrate(con)
+    # films already in the db (added from the pool, Radarr, ...) get refreshed too
+    existing = {r[0] for r in con.execute("SELECT tconst FROM films")}
+    upsert = [dict(pool[t], added="pool") for t in existing if t in pool and t not in films]
+    for t in films:
+        films[t]["added"] = "filter"
+    con.executemany("""INSERT INTO films (tconst,title,original_title,year,decade,runtime,genres,rating,votes,
+                                          directors,writers,added)
+        VALUES (:tconst,:title,:original_title,:year,:year/10*10,:runtime,:genres,:rating,:votes,:directors,:writers,:added)
+        ON CONFLICT(tconst) DO UPDATE SET title=excluded.title, original_title=excluded.original_title,
+          year=excluded.year, decade=excluded.decade, runtime=excluded.runtime, genres=excluded.genres,
+          rating=excluded.rating, votes=excluded.votes, directors=excluded.directors, writers=excluded.writers,
+          added=COALESCE(films.added, excluded.added)""",
+        list(films.values()) + upsert)
+    con.execute("DELETE FROM pool")
+    con.executemany("""INSERT INTO pool (tconst,title,original_title,year,runtime,genres,rating,votes,directors,writers)
+        VALUES (:tconst,:title,:original_title,:year,:runtime,:genres,:rating,:votes,:directors,:writers)""",
+        list(pool.values()))
     con.commit()
     n = con.execute("SELECT COUNT(*) FROM films").fetchone()[0]
-    print(f"\ndone: {n} films in {a.db}")
-    print("next: python enrich_tmdb.py   (posters, optional but worth it)")
-    print("then: python app.py           (opens the catalogue on http://localhost:8000)")
+    p = con.execute("SELECT COUNT(*) FROM pool").fetchone()[0]
+    print(f"\ndone: {n} films in the catalogue, {p} more in the pool ({a.db})")
+    print("next: python import_stack.py   (Tautulli watch history + Radarr library)")
+    print("      python enrich_tmdb.py    (posters, optional)")
+    print("then: python app.py            (http://localhost:8000)")
 
 
 if __name__ == "__main__":
