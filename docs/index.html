@@ -108,6 +108,7 @@
   .chip.on{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600} .chip.on::before{content:"+ "}
   .chip.neg{background:var(--neg);color:#fff;border-color:var(--neg);font-weight:600} .chip.neg::before{content:"− "}
   .chip.lab{border-color:#4a4a55} .chip.lab.on{background:var(--p);border-color:var(--p);color:#111} .chip.lab.on::before{content:""}
+  .chip.lab.auto.on{border-style:dashed;background:#6d4f80;color:#fff}
   .chip.feel{border-color:#4a4a55} .chip.feel.on{background:#3a6b8f;border-color:#3a6b8f;color:#fff;font-weight:600} .chip.feel.on::before{content:""}
   .chip.feel.i1{background:#2b4a60} .chip.feel.i3{background:#5a9ad0;color:#111} .chip.feel .es{color:var(--mute);font-size:10px;margin-left:3px} .chip.feel.on .es{color:inherit;opacity:.8}
   .scale{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
@@ -194,7 +195,7 @@
 
 <div class="ov" id="ov"><div class="sheet" id="sheet"></div></div>
 
-<script src="shim.js?v=19091d31"></script>
+<script src="shim.js?v=3447d005"></script>
 <script>
 const IMG = "https://image.tmdb.org/t/p/w342";
 const MODES = ["browse","triage","compare","ladder","progress","tags","foryou"];
@@ -593,7 +594,10 @@ function openSheet(f, adv=false){
   META.tags.forEach(t => (groups[t.grp] ||= []).push(t));
   const chip = t => `<span class="chip ${pos.has(t.name)?"on":neg.has(t.name)?"neg":""}" data-tag="${esc(t.name)}">${esc(t.name)}${t.pos?`<span class="c">${t.pos}</span>`:""}</span>`;
   const chips = Object.entries(groups).map(([g, ts]) => `<div class="grp">${esc(g)}</div>` + ts.map(chip).join("")).join("");
-  const labelChips = META.labels.filter(l => labs.has(l.name) || l.n > 0).map(l => `<span class="chip lab ${labs.has(l.name)?"on":""}" data-label="${esc(l.name)}">${esc(l.name)}<span class="c">${l.n}</span></span>`).join("");
+  const auto = new Set((f.labels_auto||"").split(",").filter(Boolean));
+  const lgroups = {}; META.labels.forEach(l => (lgroups[l.grp] ||= []).push(l));
+  const labelChips = Object.entries(lgroups).map(([g, ls]) => `<div class="grp">${esc(g)}</div>` + ls.map(l =>
+    `<span class="chip lab ${labs.has(l.name)?"on":""} ${auto.has(l.name)?"auto":""}" data-label="${esc(l.name)}" title="${auto.has(l.name)?"suggested from IMDb/TMDB data; leave it on to make it yours":""}">${esc(l.name)}${l.n?`<span class="c">${l.n}</span>`:""}</span>`).join("")).join("");
   const feels = Object.fromEntries((f.feelings||"").split(",").filter(Boolean).map(x=>x.split(":")).map(([n,i])=>[n,+i||2]));
   const fgroups = {}; META.feelings.forEach(t => (fgroups[t.grp] ||= []).push(t));
   const feelChips = Object.entries(fgroups).map(([g, ts]) => `<div class="grp">${esc(g)}</div>` + ts.map(t =>
@@ -644,7 +648,7 @@ function openSheet(f, adv=false){
       ${field("note", "Anything else", "context, memories, where you saw it", "Saw it at a festival in Lyon with no idea what it was.")}
     </div>
     <div class="col right">
-      <div class="row"><label>labels <small>· sub-genres, a property of the film, shared with everyone</small></label>
+      <div class="row"><label>labels <small>· sub-genre and tone, a property of the film, shared with everyone · dashed = suggested from the data, click off if wrong</small></label>
         <div class="chips" id="labelchips">${labelChips}</div>
         <input type="search" id="newlabel" list="labellist" placeholder="add a label, Enter" style="min-width:160px;padding:4px 8px;font-size:12px;margin-top:8px">
         <datalist id="labellist">${META.labels.map(l=>`<option value="${esc(l.name)}">`).join("")}</datalist>

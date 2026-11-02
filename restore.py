@@ -48,7 +48,7 @@ def main():
             con.execute("INSERT OR IGNORE INTO mark_tags VALUES (?,?,?,-1)", (c, t, tag))
         for l in m.get("labels", []):
             con.execute("INSERT OR IGNORE INTO labels VALUES (?,?)", (l, "custom"))
-            con.execute("INSERT OR IGNORE INTO film_labels VALUES (?,?)", (t, l))
+            con.execute("INSERT OR IGNORE INTO film_labels (tconst,label,source) VALUES (?,?,'me')", (t, l))
         n += 1
     pairs = os.path.join(src, "pairs.jsonl")
     p = 0

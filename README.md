@@ -166,6 +166,14 @@ Pages serves `main`/`docs`, so merge or cherry-pick into `main` if you work on a
   the same over HTTP (the export menu in the header).
 - `restore.py` — puts `exports/marks.jsonl` back into a fresh `films.db`.
 
+**Labels to start from.** `setup.py` seeds ~80 labels in two groups, after Netflix's own category
+grammar (tone × sub-genre × origin; origin we already have): sub-genres (home-invasion, folk-horror,
+heist, coming-of-age, …) and tones (gritty, quirky, mind-bending, slow-burn, …). `python seed_labels.py`
+then labels the obvious films from IMDb genres and TMDB keywords (run an enrich script first, or it
+only has genres to go on). Those rows are `source='auto'`: dashed in the write-up, shipped with the
+public catalogue, never counted as anyone's word. Leave one on when you write the film up and it
+becomes yours; click it off and it's gone.
+
 **Upgrading.** From the tier version: marks get their `score` from the tier name on first
 start (my favourite → +10 … the worst shit ever → −10). From the single-curator version: Start the app once: it copies `films.db` to
 `films.db.before-curators.<date>`, moves every row of the old `my` table to `marks` under

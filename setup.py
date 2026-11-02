@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS mark_tags (   -- one row per tag on a mark; polarity 
   PRIMARY KEY (curator, tconst, tag)
 );
 CREATE TABLE IF NOT EXISTS labels (name TEXT PRIMARY KEY, grp TEXT);  -- your sub-genres: a property of the film, shared
-CREATE TABLE IF NOT EXISTS film_labels (tconst TEXT, label TEXT, PRIMARY KEY (tconst, label));
+CREATE TABLE IF NOT EXISTS film_labels (tconst TEXT, label TEXT, source TEXT DEFAULT 'me', PRIMARY KEY (tconst, label));  -- source: me | auto (seed_labels.py)
 CREATE INDEX IF NOT EXISTS idx_marks_tconst ON marks(tconst);
 CREATE TABLE IF NOT EXISTS feelings (name TEXT PRIMARY KEY, grp TEXT, es TEXT);  -- what the film leaves in you at the end
 CREATE TABLE IF NOT EXISTS mark_feelings (   -- at most two per mark, intensity 1..3
@@ -108,8 +108,30 @@ MIGRATIONS = {
               "rt INTEGER", "metacritic INTEGER", "omdb_checked INTEGER DEFAULT 0"],
     "pairs": ["curator TEXT", "reason TEXT"],
     "marks": ["score INTEGER"],
+    "film_labels": ["source TEXT DEFAULT 'me'"],
     "events": ["curator TEXT"],
 }
+
+LABELS = [  # starter sub-genres and tones, after Netflix's own category grammar (tone x subgenre x origin); add/rename in the app
+    # subgenre
+    ("psychological-horror", "subgenre"), ("slasher", "subgenre"), ("serial-killer", "subgenre"), ("home-invasion", "subgenre"),
+    ("folk-horror", "subgenre"), ("creature-feature", "subgenre"), ("found-footage", "subgenre"), ("haunted-house", "subgenre"),
+    ("possession", "subgenre"), ("zombie", "subgenre"), ("vampire", "subgenre"), ("b-horror", "subgenre"), ("new-french-extremity", "subgenre"),
+    ("coming-of-age", "subgenre"), ("tearjerker", "subgenre"), ("courtroom", "subgenre"), ("political-thriller", "subgenre"), ("spy", "subgenre"),
+    ("heist", "subgenre"), ("detective", "subgenre"), ("murder-mystery", "subgenre"), ("whodunit", "subgenre"), ("gangster", "subgenre"),
+    ("revenge", "subgenre"), ("survival", "subgenre"), ("disaster", "subgenre"), ("war", "subgenre"), ("western", "subgenre"),
+    ("martial-arts", "subgenre"), ("superhero", "subgenre"), ("time-travel", "subgenre"), ("alien", "subgenre"), ("space", "subgenre"),
+    ("dystopia", "subgenre"), ("post-apocalyptic", "subgenre"), ("cyberpunk", "subgenre"), ("fantasy-quest", "subgenre"), ("musical", "subgenre"),
+    ("showbiz", "subgenre"), ("sports", "subgenre"), ("biopic", "subgenre"), ("satire", "subgenre"), ("black-comedy", "subgenre"),
+    ("romcom", "subgenre"), ("road-movie", "subgenre"), ("buddy", "subgenre"), ("animal-tale", "subgenre"), ("period-drama", "subgenre"),
+    ("teen", "subgenre"), ("experimental", "subgenre"), ("cult-classic", "subgenre"), ("anthology", "subgenre"), ("mockumentary", "subgenre"),
+    # tone (Netflix's adjectives)
+    ("gritty", "tone"), ("dark", "tone"), ("quirky", "tone"), ("visually-striking", "tone"), ("steamy", "tone"), ("suspenseful", "tone"),
+    ("romantic", "tone"), ("goofy", "tone"), ("scary", "tone"), ("gory", "tone"), ("violent", "tone"), ("witty", "tone"),
+    ("understated", "tone"), ("irreverent", "tone"), ("cerebral", "tone"), ("mind-bending", "tone"), ("campy", "tone"), ("feel-good", "tone"),
+    ("emotional", "tone"), ("sentimental", "tone"), ("inspiring", "tone"), ("imaginative", "tone"), ("raunchy", "tone"), ("heartfelt", "tone"),
+    ("controversial", "tone"), ("deadpan", "tone"), ("slow-burn", "tone"), ("chilling", "tone"),
+]
 
 FEELINGS = [  # (name, group, spanish). The visitor's first question is "what did you feel at the end?": same words here.
     ("wrecked", "hit hard", "destrozado"), ("unsettled", "hit hard", "inquieto"), ("hollow", "hit hard", "vacío"),
@@ -160,6 +182,7 @@ def migrate(con):
     con.executemany("INSERT OR IGNORE INTO tags VALUES (?,?)", TAGS)
     con.executemany("INSERT OR IGNORE INTO curators VALUES (?,?,?)", CURATORS)
     con.executemany("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", FEELINGS)
+    con.executemany("INSERT OR IGNORE INTO labels VALUES (?,?)", LABELS)
     names = {score: name for name, score, _ in TIERS}
     con.executemany("INSERT OR IGNORE INTO scale VALUES (?,?)", [(sc, names.get(sc, "")) for sc in range(10, -11, -1)])
     # marks written before the scale: score from the tier name

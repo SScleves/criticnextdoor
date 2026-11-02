@@ -14,7 +14,7 @@ import gzip, hashlib, json, os, re, shutil, sqlite3, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS = os.path.join(HERE, "docs")
-from setup import TAGS, migrate  # noqa: E402
+from setup import TAGS, LABELS, migrate  # noqa: E402
 
 
 def main():
@@ -23,9 +23,12 @@ def main():
     shutil.copy(os.path.join(HERE, "films.db"), tmp)
     con = sqlite3.connect(tmp)
     migrate(con)
-    for t in ("marks", "mark_tags", "mark_feelings", "film_labels", "labels", "pairs", "events", "queue"):
+    for t in ("marks", "mark_tags", "mark_feelings", "pairs", "events", "queue"):
         con.execute(f"DELETE FROM {t}")
+    # auto labels (seed_labels.py) describe the films and ship; curators' labels are private
+    con.execute("DELETE FROM film_labels WHERE IFNULL(source,'me')<>'auto'")
     con.execute("DELETE FROM tags WHERE name NOT IN (%s)" % ",".join("?" * len(TAGS)), [t[0] for t in TAGS])
+    con.execute("DELETE FROM labels WHERE name NOT IN (%s) AND name NOT IN (SELECT label FROM film_labels)" % ",".join("?" * len(LABELS)), [l[0] for l in LABELS])
     for t in [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'my%'")]:
         con.execute(f"DROP TABLE {t}")
     con.execute("UPDATE films SET added=NULL")   # the browser treats a non-null `added` as something it added itself

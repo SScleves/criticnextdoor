@@ -23,6 +23,7 @@
     "f.poster,f.overview,f.countries,f.language,f.keywords,f.in_library,f.rt,f.metacritic," +
     "(SELECT group_concat(l.list || '#' || l.rank, '|') FROM lists l WHERE l.tconst=f.tconst) AS lists," +
     "(SELECT group_concat(fl.label, ',') FROM film_labels fl WHERE fl.tconst=f.tconst) AS labels," +
+    "(SELECT group_concat(fl.label, ',') FROM film_labels fl WHERE fl.tconst=f.tconst AND fl.source='auto') AS labels_auto," +
     "(SELECT group_concat(mm.curator || ':' || IFNULL(mm.status,'') || ':' || IFNULL(mm.score,''), '|') FROM marks mm WHERE mm.tconst=f.tconst) AS all_marks," +
     "(SELECT group_concat(qq.curator, ',') FROM queue qq WHERE qq.tconst=f.tconst) AS queued";
   const MY_COLS = "m.curator,m.status,m.score,(SELECT sc.name FROM scale sc WHERE sc.score=m.score) AS tier,m.rank," +
@@ -96,6 +97,7 @@
     run("CREATE TABLE IF NOT EXISTS feelings (name TEXT PRIMARY KEY, grp TEXT, es TEXT)");
     run("CREATE TABLE IF NOT EXISTS mark_feelings (curator TEXT, tconst TEXT, feeling TEXT, intensity INTEGER DEFAULT 2, PRIMARY KEY (curator, tconst, feeling))");
     run("CREATE TABLE IF NOT EXISTS queue (curator TEXT, tconst TEXT, added TEXT, PRIMARY KEY (curator, tconst))");
+    if (!q("PRAGMA table_info(film_labels)").some(r => r.name === "source")) run("ALTER TABLE film_labels ADD COLUMN source TEXT DEFAULT 'me'");
     const have = q("PRAGMA table_info(marks)").map(r => r.name);
     if (!have.includes("score")) run("ALTER TABLE marks ADD COLUMN score INTEGER");
     if (!q("PRAGMA table_info(pairs)").some(r => r.name === "reason")) run("ALTER TABLE pairs ADD COLUMN reason TEXT");
@@ -110,7 +112,7 @@
   function collectState() {
     const marks = q(`SELECT ${MY_COLS}, m.tconst FROM marks m`).map(r => ({ ...r, tags: parts(r.tags, ","), feelings: parts(r.feelings, ",") }));
     const fl = {};
-    for (const r of q("SELECT tconst, group_concat(label, ',') AS labels FROM film_labels GROUP BY tconst"))
+    for (const r of q("SELECT tconst, group_concat(label, ',') AS labels FROM film_labels WHERE IFNULL(source,'me')='me' GROUP BY tconst"))
       fl[r.tconst] = { labels: parts(r.labels, ","), at: labelsAt[r.tconst] || "" };
     for (const t in labelsAt) if (!fl[t]) fl[t] = { labels: [], at: labelsAt[t] };   // an emptied label set must travel too
     return {
@@ -128,7 +130,8 @@
     run("BEGIN");
     try {
       for (const a of s.added || []) addFromPool(a.tconst, a.added, false);
-      for (const t of ["marks", "mark_tags", "mark_feelings", "film_labels", "pairs", "events", "queue"]) run(`DELETE FROM ${t}`);
+      for (const t of ["marks", "mark_tags", "mark_feelings", "pairs", "events", "queue"]) run(`DELETE FROM ${t}`);
+      run("DELETE FROM film_labels WHERE IFNULL(source,'me')='me'");
       for (const t of s.tags || []) run("INSERT OR IGNORE INTO tags VALUES (?,?)", [t.name, t.grp || "custom"]);
       for (const l of s.labels || []) run("INSERT OR IGNORE INTO labels VALUES (?,?)", [l.name, l.grp || "custom"]);
       for (const f of s.feelings || []) run("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", [f.name, f.grp || "custom", f.es || ""]);
@@ -154,7 +157,7 @@
       labelsAt = {};
       for (const [t, v] of Object.entries(s.film_labels || {})) {
         labelsAt[t] = v.at || "";
-        for (const l of v.labels || []) { run("INSERT OR IGNORE INTO labels VALUES (?,?)", [l, "custom"]); run("INSERT OR IGNORE INTO film_labels VALUES (?,?)", [t, l]); }
+        for (const l of v.labels || []) { run("INSERT OR IGNORE INTO labels VALUES (?,?)", [l, "custom"]); run("INSERT OR REPLACE INTO film_labels (tconst,label,source) VALUES (?,?,'me')", [t, l]); }
       }
       for (const p of s.pairs || []) run("INSERT INTO pairs (ts,a,b,winner,skipped,curator,reason) VALUES (?,?,?,?,?,?,?)", [p.ts, p.a, p.b, p.winner, p.skipped, p.curator, p.reason ?? null]);
       for (const e of s.events || []) run("INSERT INTO events (ts,kind,tconst,payload,source,curator) VALUES (?,?,?,?,?,?)", [e.ts, e.kind, e.tconst, e.payload, e.source, e.curator]);
@@ -426,7 +429,7 @@
 
   function setLabels(tconst, labels) {
     run("DELETE FROM film_labels WHERE tconst=?", [tconst]);
-    for (let l of labels) { l = norm(l); if (!l) continue; run("INSERT OR IGNORE INTO labels VALUES (?,?)", [l, "custom"]); run("INSERT OR IGNORE INTO film_labels VALUES (?,?)", [tconst, l]); }
+    for (let l of labels) { l = norm(l); if (!l) continue; run("INSERT OR IGNORE INTO labels VALUES (?,?)", [l, "custom"]); run("INSERT OR IGNORE INTO film_labels (tconst,label,source) VALUES (?,?,'me')", [tconst, l]); }
     labelsAt[tconst] = now();
   }
 

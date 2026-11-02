@@ -26,6 +26,7 @@ FILM_COLS = ("f.tconst,f.title,f.year,f.decade,f.runtime,f.genres,f.rating,f.vot
              "f.poster,f.overview,f.countries,f.language,f.keywords,f.in_library,f.rt,f.metacritic,"
              "(SELECT group_concat(l.list || '#' || l.rank, '|') FROM lists l WHERE l.tconst=f.tconst) AS lists,"
              "(SELECT group_concat(fl.label, ',') FROM film_labels fl WHERE fl.tconst=f.tconst) AS labels,"
+             "(SELECT group_concat(fl.label, ',') FROM film_labels fl WHERE fl.tconst=f.tconst AND fl.source='auto') AS labels_auto,"
              "(SELECT group_concat(mm.curator || ':' || IFNULL(mm.status,'') || ':' || IFNULL(mm.score,''), '|')"
              " FROM marks mm WHERE mm.tconst=f.tconst) AS all_marks,"
              "(SELECT group_concat(qq.curator, ',') FROM queue qq WHERE qq.tconst=f.tconst) AS queued")
@@ -481,13 +482,14 @@ def mark(m: Mark):
 
 
 def set_labels(con, tconst, labels):
+    """The curator's label set for a film. An auto label the curator keeps becomes theirs; one they drop is removed."""
     con.execute("DELETE FROM film_labels WHERE tconst=?", (tconst,))
     for l in labels:
         l = norm(l)
         if not l:
             continue
         con.execute("INSERT OR IGNORE INTO labels VALUES (?,?)", (l, "custom"))
-        con.execute("INSERT OR IGNORE INTO film_labels VALUES (?,?)", (tconst, l))
+        con.execute("INSERT OR IGNORE INTO film_labels (tconst,label,source) VALUES (?,?,'me')", (tconst, l))
 
 
 # ---- tags and labels: the vocabulary ----------------------------------------

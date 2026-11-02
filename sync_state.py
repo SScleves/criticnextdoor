@@ -37,7 +37,7 @@ def collect(con):
         d["feelings"] = [f"{f}:{i}" for f, i in con.execute("SELECT feeling, intensity FROM mark_feelings WHERE curator=? AND tconst=?", (d["curator"], d["tconst"]))]
         marks.append(d)
     fl = {}
-    for t, labels in con.execute("SELECT tconst, group_concat(label, ',') FROM film_labels GROUP BY tconst"):
+    for t, labels in con.execute("SELECT tconst, group_concat(label, ',') FROM film_labels WHERE IFNULL(source,'me')='me' GROUP BY tconst"):
         fl[t] = {"labels": labels.split(","), "at": ""}
     return {"v": STATE_V, "ts": now(), "marks": marks, "film_labels": fl,
             "tags": [dict(zip(("name", "grp"), r)) for r in con.execute("SELECT name, grp FROM tags")],
@@ -80,8 +80,9 @@ def merge(a, b):
 def apply(con, s):
     for x in s.get("added", []):
         add_from_pool(con, x["tconst"], x.get("added") or "pool")
-    for t in ("marks", "mark_tags", "mark_feelings", "film_labels", "pairs", "events", "queue"):
+    for t in ("marks", "mark_tags", "mark_feelings", "pairs", "events", "queue"):
         con.execute(f"DELETE FROM {t}")
+    con.execute("DELETE FROM film_labels WHERE IFNULL(source,'me')='me'")
     for t in s.get("tags", []):
         con.execute("INSERT OR IGNORE INTO tags VALUES (?,?)", (t["name"], t.get("grp") or "custom"))
     for l in s.get("labels", []):
@@ -110,7 +111,7 @@ def apply(con, s):
     for t, v in s.get("film_labels", {}).items():
         for l in v.get("labels", []):
             con.execute("INSERT OR IGNORE INTO labels VALUES (?,?)", (l, "custom"))
-            con.execute("INSERT OR IGNORE INTO film_labels VALUES (?,?)", (t, l))
+            con.execute("INSERT OR REPLACE INTO film_labels (tconst,label,source) VALUES (?,?,'me')", (t, l))
     for p in s.get("pairs", []):
         con.execute("INSERT INTO pairs (ts,a,b,winner,skipped,curator,reason) VALUES (?,?,?,?,?,?,?)", (p["ts"], p["a"], p["b"], p.get("winner"), p.get("skipped", 0), p.get("curator"), p.get("reason")))
     for e in s.get("events", []):
