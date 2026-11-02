@@ -1,5 +1,7 @@
 # filmcat — your taste, in your words, as training data
 
+**Open it:** https://sscleves.github.io/criticnextdoor/ (front door: picks home wifi or meshnet). The app itself runs on the media server at `http://192.168.1.8:8000`.
+
 Browse ~6,600 films that matter (IMDb's data), mark what you've seen, give each a
 tier, tags (+ why it worked / − what went wrong), a note in your own words, and
 answer "which did you like more?" pairs. Everything you type is versioned and
