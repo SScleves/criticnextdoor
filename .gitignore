@@ -1,9 +1,9 @@
 .venv/
 __pycache__/
-data/
+/data/
 *.log
 *.db
 my_taste.csv
 exports/
 state/
-*.db.*
+/films.db.*
