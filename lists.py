@@ -30,24 +30,39 @@ def connect():
     return con
 
 
+def norm(s):
+    """Lower-case, straight quotes, no punctuation: 'Schindler’s List' == \"Schindler's List\"."""
+    s = s.lower().replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
+    s = re.sub(r"\s*[:\-–—]\s*", " ", s)
+    s = re.sub(r"[^\w\s]", "", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
 class Resolver:
-    """title+year -> tconst against the pool (which contains the catalogue too)."""
+    """title+year -> tconst against the pool (which contains the catalogue too).
+    Exact normalised match first; then a same-year film whose IMDb title contains the given one
+    ('The Empire Strikes Back' -> 'Star Wars: Episode V - The Empire Strikes Back')."""
 
     def __init__(self, con):
-        self.by = {}
-        for t, title, orig, year in con.execute("SELECT tconst,title,original_title,year FROM pool"):
-            for name in {title.lower(), (orig or "").lower()}:
-                if name:
-                    self.by.setdefault((name, year), []).append(t)
+        self.by, self.by_year = {}, {}
+        for t, title, orig, year, votes in con.execute("SELECT tconst,title,original_title,year,votes FROM pool ORDER BY votes DESC"):
+            names = {norm(title), norm(orig or "")} - {""}
+            for name in names:
+                self.by.setdefault((name, year), []).append(t)
+            self.by_year.setdefault(year, []).append((t, names))
 
     def __call__(self, title, year):
-        title = title.strip().lower()
-        for y in (year, year - 1, year + 1) if year else (None,):
-            c = self.by.get((title, y), [])
-            if len(c) == 1:
-                return c[0]
+        title = norm(title)
+        years = (year, year - 1, year + 1) if year else (None,)
+        for y in years:
+            c = self.by.get((title, y))
             if c:
-                return c[0]  # same title+year twice: take the first (highest-voted ordering not kept; rare)
+                return c[0]  # pool is ordered by votes, so ties go to the better-known film
+        if len(title) >= 6:
+            for y in years:
+                for t, names in self.by_year.get(y, []):
+                    if any(title in n for n in names):
+                        return t
         return None
 
 
