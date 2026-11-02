@@ -16,6 +16,10 @@ import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 API = "https://www.omdbapi.com/"
+if os.path.exists(os.path.join(HERE, ".env")):   # KEY=value lines, never committed
+    for line in open(os.path.join(HERE, ".env")):
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.strip().split("=", 1); os.environ.setdefault(k, v.strip().strip('"'))
 
 
 def ensure_columns(con):
