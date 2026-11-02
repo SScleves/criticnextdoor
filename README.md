@@ -1,9 +1,11 @@
-# filmcat — your taste, in your words, as training data
+# Critic Next Door, phase 1: the catalogue
 
-Browse ~6,600 films that matter (IMDb's data), mark what you've seen, give each a
-tier, tags (+ why it worked / − what went wrong), a note in your own words, and
-answer "which did you like more?" pairs. Everything you type is versioned and
-exported as jsonl: that's the input for the recommender you'll build on it.
+Your taste, in your words, as training data. Browse ~6,600 films that matter (IMDb's
+data), mark what you've seen, give each a tier, order the films inside a tier, tag it
+(+ why it worked / − what went wrong), label it with your own sub-genres, write it up in
+a fixed shape, and answer "which did you like more?" pairs. Two curators, no login.
+Everything you type is versioned and exported: that's the input for the recommender
+(phase 2) and the swipe room (phase 3).
 
 ## Run it
 
@@ -22,7 +24,17 @@ TMDB_API_KEY=your_key .venv/bin/python enrich_tmdb.py     # ~25 min, safe to sto
 
 ## Workflow
 
-Three modes in the header:
+**Who's marking.** The switch next to the title (Santi / Paola) says whose marks you're
+looking at and writing. Every mark, tag, tier, duel and note is stored per curator; the
+other curator's mark shows on each card as a small purple chip. Labels (sub-genres) are a
+property of the film and shared. To add a curator, add a row to `CURATORS` in `setup.py`.
+
+**Lists as projects.** Pick a list in the filter (IMDb Top 250, your Letterboxd lists…)
+and the bar above the grid shows, for every curator, how much of it is seen, tiered and
+noted. Work through it in triage or browse under your own name; the consolidation is
+automatic because the list is the same and the marks are per person.
+
+Modes in the header (each has its own `#url`; a film's write-up is `#film/tt…`):
 
 - **browse** — the grid. Filter, click a poster, write it up.
   Search matches title and director. If a film isn't there, search shows a
@@ -31,12 +43,32 @@ Three modes in the header:
   `W` want to see, `N` not seen, `→` skip, `←` back. Put the status filter on
   "unmarked" and sort by popularity, then just go.
 - **compare** — two films you've seen, "which did you like more?" `←` `→` `↓` can't say.
-  Mostly picks pairs inside the same tier, because that's where the order is unknown.
-  This is the strongest ranking signal you can give a model, and the fastest to answer.
+  Mostly picks pairs inside the same tier, because that's where the order is unknown;
+  "same tier only" and a tier filter narrow it. The strongest ranking signal you can
+  give a model, and the fastest to answer.
+- **ladder** — one tier, your films in it, drag (or `↑` `↓`) to put them in order. Films you
+  haven't ordered sort by their duel win rate. Click a title to write it up.
+- **progress** — per genre, decade, label, list and tier: seen / tiered / noted / unmarked.
+  Click a row to browse exactly that. Quick links for "seen but not noted" and "seen but
+  not tiered"; the status filter has them too.
+- **tags** — rename, merge, regroup and delete tags and labels. A rename or merge rewrites
+  every film that carries it.
 
-The write-up (seen films): tier · how often / when / how well you remember it ·
-tags, where one click = `+` (this is why it worked) and two = `−` (this is what
-went wrong) · the note. Write the note for a person, not for the machine.
+**The write-up** opens on any poster and stays open while you go `Ctrl+←` / `Ctrl+→`
+through the films of the current filter. It saves itself as you type ("saved" bottom
+right); `Esc` or `Ctrl+Enter` closes it (and moves on, in triage). Keys `1`–`9` `0` `-` `=`
+pick the tier when you're not in a text field; `/` jumps to the new-tag box.
+
+- status (seen / want / not seen), tier, how often / when / how well you remember it
+- **Why it reached me** — feeling and mechanism, not plot. The field the AI reads.
+  "You know from minute one she's screwed" is worth more than a paragraph of plot.
+- What it's about · Who it's for · Who should avoid it · Anything else
+- tags: one click `+` why it worked, two `−` what went wrong, three off. Suggestions above
+  the list come from tags you used on films with the same director, a shared label or
+  shared themes.
+- labels: your sub-genres (folk horror, home invasion, new french extremity…).
+
+Write for a person (for Paola), not for the machine; the machine reads it better that way too.
 
 - **for you** — unseen films scored by what they share with what you tiered: director >
   TMDB themes > genre > decade, list membership and your want list as small boosts, what you
@@ -68,13 +100,22 @@ Adds 🍅 and Metacritic to cards, "by Rotten Tomatoes" to the sort, `rt`/`metac
 
 ## Where your words live
 
-- `films.db` — everything, sqlite. `my` is the current state, `events` is the
-  append-only history of every change, `pairs` are the comparisons.
-- `exports/` — rewritten after every save: `marks.jsonl`, `pairs.jsonl`,
-  `events.jsonl`, `vocab.jsonl`. If `exports/` is a git repo it auto-commits,
-  and pushes if a remote is set. Make that remote **private** — the notes are yours.
-- `/api/export.csv` and `/api/export.json` — the same data over HTTP.
+- `films.db` — everything, sqlite. `marks` is the current state (one row per curator per
+  film), `mark_tags` the tags on them, `film_labels` the labels, `pairs` the comparisons,
+  `events` the append-only history of every change.
+- `exports/` — rewritten after every save: `marks.jsonl`, `pairs.jsonl`, `events.jsonl`,
+  `vocab.jsonl`, `marks.csv` (everyone), and per curator `marks_<id>.csv` and
+  **`notes_<id>.md`**: every seen film as a fixed-shape markdown entry (tier, labels, tags,
+  the four fields). That file is what phase 2 hands to the model. If `exports/` is a git
+  repo it auto-commits, and pushes if a remote is set. Make that remote **private**.
+- `/api/export.csv[?curator=santi]`, `/api/export.md?curator=santi`, `/api/export.json` —
+  the same over HTTP (the export menu in the header).
 - `restore.py` — puts `exports/marks.jsonl` back into a fresh `films.db`.
+
+**Upgrading from the single-curator version.** Start the app once: it copies `films.db` to
+`films.db.before-curators.<date>`, moves every row of the old `my` table to `marks` under
+`santi` (tags included), gives the old pairs and events an owner, and keeps the old table as
+`my_legacy`. Plex-imported "seen" marks land on `santi` too (`FILMCAT_IMPORT_CURATOR` changes that).
 
 So: `films.db` can be rebuilt from IMDb + `exports/` any time. Back up `exports/`.
 
