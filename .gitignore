@@ -7,3 +7,4 @@ my_taste.csv
 exports/
 state/
 /films.db.*
+.env

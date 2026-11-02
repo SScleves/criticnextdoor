@@ -3,21 +3,28 @@
 Step 2 (optional): add posters, overview, keywords and countries from TMDB.
 
 Needs a free API key: https://www.themoviedb.org/settings/api  (choose "Developer").
-Put it in the environment:  export TMDB_API_KEY=xxxx   (or pass --key)
+Put it in .env next to this file (TMDB_API_KEY=xxxx), or in the environment, or pass --key.
 
 Safe to re-run: it skips films that already have a poster.
 ~6000 films takes ~25 minutes (TMDB allows ~40 requests/second, we go gentler).
+Posters are TMDB image paths; the app loads them from image.tmdb.org, nothing is stored locally.
+Afterwards: ./publish.sh  (or python build_static.py) so the online edition gets them too.
 """
 import argparse, os, sqlite3, sys, time
 import requests
 
+HERE = os.path.dirname(os.path.abspath(__file__))
 API = "https://api.themoviedb.org/3"
+if os.path.exists(os.path.join(HERE, ".env")):   # KEY=value lines, never committed
+    for line in open(os.path.join(HERE, ".env")):
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.strip().split("=", 1); os.environ.setdefault(k, v.strip().strip('"'))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--key", default=os.environ.get("TMDB_API_KEY"))
-    ap.add_argument("--db", default="films.db")
+    ap.add_argument("--db", default=os.path.join(HERE, "films.db"))
     ap.add_argument("--limit", type=int, default=0, help="stop after N films (for testing)")
     a = ap.parse_args()
     if not a.key:
