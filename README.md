@@ -29,10 +29,16 @@ service, no account needed (`enrich_tmdb.py` / `enrich_omdb.py` remain as altern
 
 ## Workflow
 
-**Who's marking.** The switch next to the title (Santi / Paola) says whose marks you're
-looking at and writing. Every mark, tag, tier, duel and note is stored per curator; the
-other curator's mark shows on each card as a small purple chip. Labels (sub-genres) are a
-property of the film and shared. To add a curator, add a row to `CURATORS` in `setup.py`.
+**Who's marking.** The two names next to the title (Santi, amber · Paola, purple) say whose
+marks you're looking at and writing; the whole header takes that person's colour. Every mark,
+score, end-feeling, tag, duel and note is stored per curator; the other person's mark shows on
+each card as a small chip in their colour. Labels (sub-genres) are a property of the film and
+shared. To add a curator, add a row to `CURATORS` in `setup.py`.
+
+**Who writes what.** Drag a poster onto a name: that film goes into that person's to-write
+queue (the counter on the name, the ✎ badge on the card). "my queue" in the filters shows
+your own; triage runs through it. Scoring the film, or writing any note, takes it out of the
+queue. A queue is a to-do, not an opinion: both of you can still mark any film.
 
 **Lists as projects.** Pick a list in the filter (IMDb Top 250, your Letterboxd lists…)
 and the bar above the grid shows, for every curator, how much of it is seen, tiered and
@@ -47,27 +53,39 @@ Modes in the header (each has its own `#url`; a film's write-up is `#film/tt…`
 - **triage** — one film at a time, keyboard only. `S` seen (opens the write-up),
   `W` want to see, `N` not seen, `→` skip, `←` back. Put the status filter on
   "unmarked" and sort by popularity, then just go.
-- **compare** — two films you've seen, "which did you like more?" `←` `→` `↓` can't say.
-  Mostly picks pairs inside the same tier, because that's where the order is unknown;
-  "same tier only" and a tier filter narrow it. The strongest ranking signal you can
-  give a model, and the fastest to answer.
-- **ladder** — one tier, your films in it, drag (or `↑` `↓`) to put them in order. Films you
+- **compare** — two films you've seen, "which did you like more?" `←` `→` `↓` can't say,
+  then one line of *because…* (Enter saves, Esc skips the line). Mostly picks pairs at the
+  same score, because that's where the order is unknown; "same score only" and a score
+  filter narrow it.
+- **ladder** — one score, your films at it, drag (or `↑` `↓`) to put them in order. Films you
   haven't ordered sort by their duel win rate. Click a title to write it up.
-- **progress** — per genre, decade, label, list and tier: seen / tiered / noted / unmarked.
-  Click a row to browse exactly that. Quick links for "seen but not noted" and "seen but
-  not tiered"; the status filter has them too.
-- **tags** — rename, merge, regroup and delete tags and labels. A rename or merge rewrites
-  every film that carries it.
+- **progress** — both of you side by side: a summary box each, then per genre, decade, label,
+  list, scale step and end-feeling: seen / scored / felt / noted / to write / unmarked per
+  person. Click a row to browse exactly that. Quick links for "seen, not noted", "seen, not
+  scored", "seen, no end-feeling" and "my queue"; the status filter has them too.
+- **words** — the vocabulary everything is written in: name the scale steps; rename, merge,
+  regroup and delete end-feelings, tags and labels. A rename or merge rewrites every film
+  that carries the word.
 
 **The write-up** opens on any poster and stays open while you go `Ctrl+←` / `Ctrl+→`
 through the films of the current filter. It saves itself as you type ("saved" bottom
 right); `Esc` or `Ctrl+Enter` closes it (and moves on, in triage). Keys `1`–`9` `0` `-` `=`
 pick the tier when you're not in a text field; `/` jumps to the new-tag box.
 
-- status (seen / want / not seen), tier, how often / when / how well you remember it
+- status (seen / want / not seen) · **score** on a −10…+10 scale (`=` up, `-` down when not
+  typing). Any step can carry a name: type it next to the number, or on the **words** page.
+  Names are labels on numbers, so renaming never touches a film. The old tiers are the seeds
+  (+10 my favourite … −10 the worst shit ever); the other steps start unnamed.
+- **end-feeling**: what it left you with when it ended, one or two from a fixed list
+  (wrecked, unsettled, hollow, shaken, warm, giddy, cosy, moved, wired, satisfied, puzzled,
+  cheated, numb, annoyed, delighted-by-the-mess), each at 1–3. The visitor's first question in
+  phase 2 is "what did you feel at the end?", in these same words.
+- how often / when / how well you remember it
 - **Why it reached me** — feeling and mechanism, not plot. The field the AI reads.
   "You know from minute one she's screwed" is worth more than a paragraph of plot.
 - What it's about · Who it's for · Who should avoid it · Anything else
+- a counter under each text field says when a note is getting long for a note. It's a guide,
+  not a limit: the fields are for feeling and mechanism; plot lives on TMDB already.
 - tags: one click `+` why it worked, two `−` what went wrong, three off. Suggestions above
   the list come from tags you used on films with the same director, a shared label or
   shared themes.
@@ -136,10 +154,11 @@ Pages serves `main`/`docs`, so merge or cherry-pick into `main` if you work on a
 ## Where your words live
 
 - `films.db` — everything, sqlite. `marks` is the current state (one row per curator per
-  film), `mark_tags` the tags on them, `film_labels` the labels, `pairs` the comparisons,
-  `events` the append-only history of every change.
+  film, with `score`), `mark_tags` and `mark_feelings` the tags and end-feelings on them,
+  `film_labels` the labels, `scale` the names of the 21 steps, `queue` who writes what,
+  `pairs` the comparisons (with `reason`), `events` the append-only history of every change.
 - `exports/` — rewritten after every save: `marks.jsonl`, `pairs.jsonl`, `events.jsonl`,
-  `vocab.jsonl`, `marks.csv` (everyone), and per curator `marks_<id>.csv` and
+  `queue.jsonl`, `vocab.jsonl` (scale, feelings, tags, labels), `marks.csv` (everyone), and per curator `marks_<id>.csv` and
   **`notes_<id>.md`**: every seen film as a fixed-shape markdown entry (tier, labels, tags,
   the four fields). That file is what phase 2 hands to the model. If `exports/` is a git
   repo it auto-commits, and pushes if a remote is set. Make that remote **private**.
@@ -147,7 +166,8 @@ Pages serves `main`/`docs`, so merge or cherry-pick into `main` if you work on a
   the same over HTTP (the export menu in the header).
 - `restore.py` — puts `exports/marks.jsonl` back into a fresh `films.db`.
 
-**Upgrading from the single-curator version.** Start the app once: it copies `films.db` to
+**Upgrading.** From the tier version: marks get their `score` from the tier name on first
+start (my favourite → +10 … the worst shit ever → −10). From the single-curator version: Start the app once: it copies `films.db` to
 `films.db.before-curators.<date>`, moves every row of the old `my` table to `marks` under
 `santi` (tags included), gives the old pairs and events an owner, and keeps the old table as
 `my_legacy`. Plex-imported "seen" marks land on `santi` too (`FILMCAT_IMPORT_CURATOR` changes that).

@@ -23,12 +23,15 @@
     "f.poster,f.overview,f.countries,f.language,f.keywords,f.in_library,f.rt,f.metacritic," +
     "(SELECT group_concat(l.list || '#' || l.rank, '|') FROM lists l WHERE l.tconst=f.tconst) AS lists," +
     "(SELECT group_concat(fl.label, ',') FROM film_labels fl WHERE fl.tconst=f.tconst) AS labels," +
-    "(SELECT group_concat(mm.curator || ':' || IFNULL(mm.status,'') || ':' || IFNULL(mm.tier,''), '|') FROM marks mm WHERE mm.tconst=f.tconst) AS all_marks";
-  const MY_COLS = "m.curator,m.status,m.tier,m.rank,m.times,m.when_seen,m.memory,m.about,m.reached,m.for_whom,m.avoid," +
-    "m.note,m.source,m.updated," +
-    "(SELECT group_concat(CASE WHEN mt.polarity<0 THEN '-'||mt.tag ELSE mt.tag END, ',') FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=m.tconst) AS tags";
+    "(SELECT group_concat(mm.curator || ':' || IFNULL(mm.status,'') || ':' || IFNULL(mm.score,''), '|') FROM marks mm WHERE mm.tconst=f.tconst) AS all_marks," +
+    "(SELECT group_concat(qq.curator, ',') FROM queue qq WHERE qq.tconst=f.tconst) AS queued";
+  const MY_COLS = "m.curator,m.status,m.score,(SELECT sc.name FROM scale sc WHERE sc.score=m.score) AS tier,m.rank," +
+    "m.times,m.when_seen,m.memory,m.about,m.reached,m.for_whom,m.avoid,m.note,m.source,m.updated," +
+    "(SELECT group_concat(CASE WHEN mt.polarity<0 THEN '-'||mt.tag ELSE mt.tag END, ',') FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=m.tconst) AS tags," +
+    "(SELECT group_concat(mf.feeling || ':' || mf.intensity, ',') FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=m.tconst) AS feelings";
+  const STATE_V = 2;   // v2: marks.score + feelings, pairs.reason, queue, scale, feelings vocabulary
   const CSV_COLS = ["curator", "tconst", "title", "year", "directors", "genres", "labels", "countries", "language", "runtime",
-    "rating", "rt", "metacritic", "lists", "status", "tier", "score", "rank", "tags_pos", "tags_neg",
+    "rating", "rt", "metacritic", "lists", "status", "score", "tier", "rank", "feelings", "tags_pos", "tags_neg",
     "times", "when_seen", "memory", "about", "reached", "for_whom", "avoid", "note",
     "source", "updated", "in_library", "keywords", "overview"];
 
@@ -70,6 +73,7 @@
         }),
       ]);
       db = new SQL.Database(buf);
+      ensureSchema();
       DEFAULT_CURATOR = (one("SELECT id FROM curators ORDER BY ord LIMIT 1") || {}).id || "santi";
       let local = null;
       try { local = JSON.parse(localStorage.getItem(STATE_KEY) || "null"); } catch {}
@@ -80,19 +84,41 @@
     } catch (e) { status = "error: " + e.message; panel(); throw e; }
   })();
 
+  // the catalogue file may have been built before these tables existed (same seeds as setup.py)
+  const TIER_NAMES = { 10: "my favourite", 9: "top tier", 8: "excellent", 7: "very good", 6: "good", 4: "ok", 1: "meh", [-2]: "bad but fun", [-3]: "guilty pleasure", [-6]: "really bad", [-8]: "awful", [-10]: "the worst shit ever" };
+  const FEELINGS = [["wrecked", "hit hard", "destrozado"], ["unsettled", "hit hard", "inquieto"], ["hollow", "hit hard", "vacío"], ["shaken", "hit hard", "sacudido"],
+    ["warm", "hit warm", "reconfortado"], ["giddy", "hit warm", "eufórico"], ["cosy", "hit warm", "acogedor"], ["moved", "hit warm", "conmovido"],
+    ["wired", "head", "con la cabeza a mil"], ["satisfied", "head", "redondo"], ["puzzled", "head", "descolocado"],
+    ["cheated", "let down", "estafado"], ["numb", "let down", "indiferente"], ["annoyed", "let down", "irritado"],
+    ["delighted-by-the-mess", "fun-bad", "encantado con el desastre"]];
+  function ensureSchema() {
+    run("CREATE TABLE IF NOT EXISTS scale (score INTEGER PRIMARY KEY, name TEXT)");
+    run("CREATE TABLE IF NOT EXISTS feelings (name TEXT PRIMARY KEY, grp TEXT, es TEXT)");
+    run("CREATE TABLE IF NOT EXISTS mark_feelings (curator TEXT, tconst TEXT, feeling TEXT, intensity INTEGER DEFAULT 2, PRIMARY KEY (curator, tconst, feeling))");
+    run("CREATE TABLE IF NOT EXISTS queue (curator TEXT, tconst TEXT, added TEXT, PRIMARY KEY (curator, tconst))");
+    const have = q("PRAGMA table_info(marks)").map(r => r.name);
+    if (!have.includes("score")) run("ALTER TABLE marks ADD COLUMN score INTEGER");
+    if (!q("PRAGMA table_info(pairs)").some(r => r.name === "reason")) run("ALTER TABLE pairs ADD COLUMN reason TEXT");
+    for (let sc = 10; sc >= -10; sc--) run("INSERT OR IGNORE INTO scale VALUES (?,?)", [sc, TIER_NAMES[sc] || ""]);
+    for (const f of FEELINGS) run("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", f);
+  }
+  const scoreByName = () => Object.fromEntries(q("SELECT name, score FROM scale WHERE name<>''").map(r => [r.name, r.score]));
+
   // ---- private state: collect / apply / merge ------------------------------------
-  const emptyState = () => ({ v: 1, ts: now(), marks: [], film_labels: {}, tags: [], labels: [], pairs: [], events: [], added: [] });
+  const emptyState = () => ({ v: STATE_V, ts: now(), marks: [], film_labels: {}, tags: [], labels: [], feelings: [], scale: [], queue: [], pairs: [], events: [], added: [] });
 
   function collectState() {
-    const marks = q(`SELECT ${MY_COLS}, m.tconst FROM marks m`).map(r => ({ ...r, tags: parts(r.tags, ",") }));
+    const marks = q(`SELECT ${MY_COLS}, m.tconst FROM marks m`).map(r => ({ ...r, tags: parts(r.tags, ","), feelings: parts(r.feelings, ",") }));
     const fl = {};
     for (const r of q("SELECT tconst, group_concat(label, ',') AS labels FROM film_labels GROUP BY tconst"))
       fl[r.tconst] = { labels: parts(r.labels, ","), at: labelsAt[r.tconst] || "" };
     for (const t in labelsAt) if (!fl[t]) fl[t] = { labels: [], at: labelsAt[t] };   // an emptied label set must travel too
     return {
-      v: 1, ts: now(), marks, film_labels: fl,
+      v: STATE_V, ts: now(), marks, film_labels: fl,
       tags: q("SELECT name, grp FROM tags"), labels: q("SELECT name, grp FROM labels"),
-      pairs: q("SELECT ts,a,b,winner,skipped,curator FROM pairs"),
+      feelings: q("SELECT name, grp, es FROM feelings"), scale: q("SELECT score, name FROM scale"),
+      queue: q("SELECT curator, tconst, added FROM queue"),
+      pairs: q("SELECT ts,a,b,winner,skipped,curator,reason FROM pairs"),
       events: q("SELECT ts,kind,tconst,payload,source,curator FROM events"),
       added: q("SELECT tconst, added FROM films WHERE added IS NOT NULL AND added<>'filter'"),
     };
@@ -102,17 +128,27 @@
     run("BEGIN");
     try {
       for (const a of s.added || []) addFromPool(a.tconst, a.added, false);
-      run("DELETE FROM marks"); run("DELETE FROM mark_tags"); run("DELETE FROM film_labels"); run("DELETE FROM pairs"); run("DELETE FROM events");
+      for (const t of ["marks", "mark_tags", "mark_feelings", "film_labels", "pairs", "events", "queue"]) run(`DELETE FROM ${t}`);
       for (const t of s.tags || []) run("INSERT OR IGNORE INTO tags VALUES (?,?)", [t.name, t.grp || "custom"]);
       for (const l of s.labels || []) run("INSERT OR IGNORE INTO labels VALUES (?,?)", [l.name, l.grp || "custom"]);
+      for (const f of s.feelings || []) run("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", [f.name, f.grp || "custom", f.es || ""]);
+      for (const x of s.scale || []) run("INSERT INTO scale VALUES (?,?) ON CONFLICT(score) DO UPDATE SET name=excluded.name", [x.score, x.name || ""]);
+      for (const x of s.queue || []) run("INSERT OR IGNORE INTO queue (curator,tconst,added) VALUES (?,?,?)", [x.curator, x.tconst, x.added || now()]);
+      const byName = scoreByName();
       for (const m of s.marks || []) {
-        run(`INSERT OR IGNORE INTO marks (curator,tconst,status,tier,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [m.curator, m.tconst, m.status, m.tier, m.rank, m.times, m.when_seen, m.memory, m.about, m.reached, m.for_whom, m.avoid, m.note, m.source, m.updated]);
+        const score = m.score ?? (m.tier ? byName[m.tier] ?? null : null);   // a v1 mark carries a tier name
+        run(`INSERT OR IGNORE INTO marks (curator,tconst,status,score,tier,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
+             VALUES (?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?)`,
+          [m.curator, m.tconst, m.status, score, m.rank, m.times, m.when_seen, m.memory, m.about, m.reached, m.for_whom, m.avoid, m.note, m.source, m.updated]);
         for (const t of m.tags || []) {
           const neg = t.startsWith("-"), name = neg ? t.slice(1) : t;
           run("INSERT OR IGNORE INTO tags VALUES (?,?)", [name, "custom"]);
           run("INSERT OR IGNORE INTO mark_tags VALUES (?,?,?,?)", [m.curator, m.tconst, name, neg ? -1 : 1]);
+        }
+        for (const fe of m.feelings || []) {
+          const [name, inten] = fe.split(":");
+          run("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", [name, "custom", ""]);
+          run("INSERT OR IGNORE INTO mark_feelings VALUES (?,?,?,?)", [m.curator, m.tconst, name, +(inten || 2)]);
         }
       }
       labelsAt = {};
@@ -120,7 +156,7 @@
         labelsAt[t] = v.at || "";
         for (const l of v.labels || []) { run("INSERT OR IGNORE INTO labels VALUES (?,?)", [l, "custom"]); run("INSERT OR IGNORE INTO film_labels VALUES (?,?)", [t, l]); }
       }
-      for (const p of s.pairs || []) run("INSERT INTO pairs (ts,a,b,winner,skipped,curator) VALUES (?,?,?,?,?,?)", [p.ts, p.a, p.b, p.winner, p.skipped, p.curator]);
+      for (const p of s.pairs || []) run("INSERT INTO pairs (ts,a,b,winner,skipped,curator,reason) VALUES (?,?,?,?,?,?,?)", [p.ts, p.a, p.b, p.winner, p.skipped, p.curator, p.reason ?? null]);
       for (const e of s.events || []) run("INSERT INTO events (ts,kind,tconst,payload,source,curator) VALUES (?,?,?,?,?,?)", [e.ts, e.kind, e.tconst, e.payload, e.source, e.curator]);
       run("COMMIT");
     } catch (e) { run("ROLLBACK"); throw e; }
@@ -134,8 +170,11 @@
     for (const [t, v] of Object.entries(b.film_labels || {})) if (!fl[t] || (v.at || "") > (fl[t].at || "")) fl[t] = v;
     const uniq = (rows, key) => { const seen = new Map(); for (const r of rows) seen.set(key(r), r); return [...seen.values()]; };
     return {
-      v: 1, ts: now(), marks: Object.values(marks), film_labels: fl,
+      v: STATE_V, ts: now(), marks: Object.values(marks), film_labels: fl,
       tags: uniq([...(a.tags || []), ...(b.tags || [])], t => t.name), labels: uniq([...(a.labels || []), ...(b.labels || [])], t => t.name),
+      feelings: uniq([...(a.feelings || []), ...(b.feelings || [])], t => t.name),
+      scale: uniq([...(a.scale || []), ...(b.scale || [])], t => t.score),
+      queue: uniq([...(a.queue || []), ...(b.queue || [])], x => x.curator + "|" + x.tconst),
       pairs: uniq([...(a.pairs || []), ...(b.pairs || [])], p => [p.curator, p.a, p.b, p.ts].join("|")),
       events: uniq([...(a.events || []), ...(b.events || [])], e => [e.ts, e.kind, e.tconst, e.curator, e.payload].join("|")),
       added: uniq([...(a.added || []), ...(b.added || [])], x => x.tconst),
@@ -200,29 +239,36 @@
   function hasNote(d) { return NOTE_FIELDS.some(k => (d[k] || "").trim()); }
 
   function* markRows(curator) {
-    const rows = q(`SELECT ${FILM_COLS},${MY_COLS},t.score FROM marks m JOIN films f ON f.tconst=m.tconst
-                    LEFT JOIN tiers t ON t.name=m.tier ${curator ? "WHERE m.curator=?" : ""} ORDER BY m.curator, m.updated`, curator ? [curator] : []);
-    for (const r of rows) { const [p, n] = splitTags(r.tags); delete r.tags; r.tags_pos = p; r.tags_neg = n; r.labels = parts(r.labels, ","); yield r; }
+    const rows = q(`SELECT ${FILM_COLS},${MY_COLS} FROM marks m JOIN films f ON f.tconst=m.tconst
+                    ${curator ? "WHERE m.curator=?" : ""} ORDER BY m.curator, m.updated`, curator ? [curator] : []);
+    for (const r of rows) { const [p, n] = splitTags(r.tags); delete r.tags; r.tags_pos = p; r.tags_neg = n; r.labels = parts(r.labels, ","); r.feelings = parts(r.feelings, ","); yield r; }
   }
+  const signed = n => (n > 0 ? "+" : "") + n;
+  const scaleName = () => Object.fromEntries(q("SELECT * FROM scale").map(r => [r.score, r.name || signed(r.score)]));
 
   function notesMd(curator) {
     const name = (one("SELECT name FROM curators WHERE id=?", [curator]) || {}).name || curator;
+    const names = scaleName(); const steps = [];
+    for (let sc = 10; sc >= -10; sc--) steps.push(names[sc] !== signed(sc) ? `${signed(sc)} ${names[sc]}` : signed(sc));
+    const feel = q("SELECT * FROM feelings").map(r => r.es ? `${r.name} (${r.es})` : r.name).join(", ");
     const out = [`# ${name}'s film notes`, "",
-      "Tiers from best to worst: " + q("SELECT name FROM tiers ORDER BY ord").map(r => r.name).join(", ") + ".",
+      `Score runs from +10 (best) to -10 (worst): ${steps.join(", ")}.`,
+      `End-feeling is what the film left me with when it ended, intensity 1-3. The vocabulary: ${feel}.`,
       "Tags marked + are why the film worked for me; tags marked − are what went wrong.", ""];
-    const ords = Object.fromEntries(q("SELECT name, ord FROM tiers").map(r => [r.name, r.ord]));
-    const rows = [...markRows(curator)].filter(d => d.status === "seen" && (d.tier || hasNote(d) || d.tags_pos.length || d.tags_neg.length));
-    rows.sort((x, y) => (ords[x.tier] ?? 99) - (ords[y.tier] ?? 99) || (x.rank || 999) - (y.rank || 999) || x.title.localeCompare(y.title));
+    const rows = [...markRows(curator)].filter(d => d.status === "seen" && (d.score != null || hasNote(d) || d.tags_pos.length || d.tags_neg.length || d.feelings.length));
+    rows.sort((x, y) => (y.score ?? -99) - (x.score ?? -99) || (x.rank || 999) - (y.rank || 999) || x.title.localeCompare(y.title));
     for (const d of rows) {
       out.push(`## ${d.title} (${d.year})`);
-      const line = [d.tier ? `tier: ${d.tier}` : "tier: none yet"];
-      if (d.rank) line.push(`rank in tier: ${d.rank}`);
+      const sc = d.score;
+      const line = [sc != null ? `score: ${signed(sc)}` + (names[sc] !== signed(sc) ? ` (${names[sc]})` : "") : "score: none yet"];
+      if (d.rank) line.push(`rank at that score: ${d.rank}`);
       if (d.directors) line.push(`director: ${d.directors}`);
       if (d.genres) line.push(`imdb genres: ${d.genres}`);
       if (d.labels.length) line.push("labels: " + d.labels.join(", "));
       if (d.runtime) line.push(`${d.runtime} min`);
       if (d.language) line.push(`language: ${d.language}`);
       out.push("- " + line.join(" · "));
+      if (d.feelings.length) out.push("- end-feeling: " + d.feelings.map(f => { const [n, i] = f.split(":"); return `${n} ${i}/3`; }).join(", "));
       const tags = [...d.tags_pos.map(t => "+" + t), ...d.tags_neg.map(t => "−" + t)];
       if (tags.length) out.push("- tags: " + tags.join(" "));
       const sits = [d.times, d.when_seen, d.memory].filter(Boolean);
@@ -239,7 +285,7 @@
     const cell = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     const lines = [CSV_COLS.join(",")];
     for (const d of markRows(curator)) {
-      d.tags_pos = d.tags_pos.join(" "); d.tags_neg = d.tags_neg.join(" "); d.labels = d.labels.join(" ");
+      d.tags_pos = d.tags_pos.join(" "); d.tags_neg = d.tags_neg.join(" "); d.labels = d.labels.join(" "); d.feelings = d.feelings.join(" ");
       lines.push(CSV_COLS.map(c => cell(d[c])).join(","));
     }
     return lines.join("\n") + "\n";
@@ -249,7 +295,9 @@
     const c = checkCurator(p.get("curator") || DEFAULT_CURATOR);
     const genres = [...new Set(q("SELECT genres FROM films").flatMap(r => parts(r.genres, ",")))].sort();
     const decades = q("SELECT DISTINCT decade FROM films ORDER BY decade").map(r => r.decade);
-    const tiers = q("SELECT * FROM tiers ORDER BY ord");
+    const scale = q("SELECT sc.score, sc.name, (SELECT COUNT(*) FROM marks m WHERE m.score=sc.score AND m.curator=? AND m.status='seen') AS n FROM scale sc ORDER BY sc.score DESC", [c]);
+    const feelings = q(`SELECT fe.name, fe.grp, fe.es, (SELECT COUNT(*) FROM mark_feelings mf WHERE mf.feeling=fe.name AND mf.curator=?) AS n,
+        (SELECT COUNT(*) FROM mark_feelings mf WHERE mf.feeling=fe.name) AS n_all FROM feelings fe ORDER BY fe.rowid`, [c]);
     const tags = q(`SELECT t.name, t.grp,
         (SELECT COUNT(*) FROM mark_tags mt WHERE mt.tag=t.name AND mt.curator=? AND mt.polarity>0) AS pos,
         (SELECT COUNT(*) FROM mark_tags mt WHERE mt.tag=t.name AND mt.curator=? AND mt.polarity<0) AS neg,
@@ -261,10 +309,13 @@
         (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='want') AS want,
         (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='not') AS notseen,
         (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen' AND ${NOTED_SQL}) AS noted,
-        (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen' AND tier IS NOT NULL) AS tiered,
+        (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen' AND score IS NOT NULL) AS tiered,
+        (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen' AND EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=m.tconst)) AS felt,
+        (SELECT COUNT(*) FROM queue WHERE curator=?1) AS queue,
         (SELECT COUNT(*) FROM pairs WHERE curator=?1 AND skipped=0) AS pairs,
         (SELECT COUNT(*) FROM films WHERE in_library=1) AS library`, [c]);
-    return { curator: c, curators: curators(), genres, decades, tiers, tags, labels, stats };
+    const queues = Object.fromEntries(curators().map(cu => [cu.id, val("SELECT COUNT(*) FROM queue WHERE curator=?", [cu.id])]));
+    return { curator: c, curators: curators(), genres, decades, scale, feelings, tags, labels, stats, queues };
   }
 
   function whereClause(p) {
@@ -277,9 +328,13 @@
     const st = g("status");
     if (st === "unmarked") where.push("m.status IS NULL");
     else if (st === "seen_nonote") where.push(`m.status='seen' AND NOT ${NOTED_SQL}`);
-    else if (st === "seen_notier") where.push("m.status='seen' AND m.tier IS NULL");
+    else if (st === "seen_notier") where.push("m.status='seen' AND m.score IS NULL");
+    else if (st === "seen_nofeeling") where.push("m.status='seen' AND NOT EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=f.tconst)");
     else if (st) { where.push("m.status = ?"); args.push(st); }
-    if (g("tier")) { where.push("m.tier = ?"); args.push(g("tier")); }
+    if (g("score") !== "") { where.push("m.score = ?"); args.push(+g("score")); }
+    else if (g("tier")) { where.push("m.score = (SELECT score FROM scale WHERE name=?)"); args.push(g("tier")); }
+    if (g("feeling")) { where.push("EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=f.tconst AND mf.feeling=?)"); args.push(g("feeling")); }
+    if (g("queue")) { where.push("EXISTS (SELECT 1 FROM queue qq WHERE qq.curator=? AND qq.tconst=f.tconst)"); args.push(g("queue")); }
     if (g("tag")) { where.push("EXISTS (SELECT 1 FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=f.tconst AND mt.tag=?)"); args.push(g("tag")); }
     if (g("q")) { where.push("(f.title LIKE ? OR f.original_title LIKE ? OR f.directors LIKE ?)"); args.push(`%${g("q")}%`, `%${g("q")}%`, `%${g("q")}%`); }
     if (+g("library")) where.push("f.in_library = 1");
@@ -295,11 +350,13 @@
 
   function films(p) {
     const c = checkCurator(p.get("curator") || DEFAULT_CURATOR), lst = p.get("lst") || "";
+    if (["1", "me"].includes(p.get("queue"))) p.set("queue", c);
     const { join, where, args } = whereClause(p);
     const order = {
       rating: "f.rating DESC, f.votes DESC", votes: "f.votes DESC", year: "f.year DESC", year_asc: "f.year ASC", title: "f.title",
       updated: "m.updated DESC", random: "RANDOM()", rt: "f.rt DESC NULLS LAST, f.rating DESC",
-      tier: "(SELECT ord FROM tiers t WHERE t.name=m.tier) ASC NULLS LAST, m.rank ASC NULLS LAST, f.rating DESC",
+      tier: "m.score DESC NULLS LAST, m.rank ASC NULLS LAST, f.rating DESC",
+      queue: "(SELECT added FROM queue qq WHERE qq.curator=m.curator AND qq.tconst=f.tconst) ASC, f.rating DESC",
       rank: lst ? "lr.rank" : "f.rating DESC",
     }[p.get("sort") || "rating"] || "f.rating DESC";
     const limit = Math.min(+(p.get("limit") || 60), 500), offset = +(p.get("offset") || 0);
@@ -319,9 +376,10 @@
     for (const r of q("SELECT list, COUNT(*) AS total FROM lists GROUP BY list ORDER BY list")) {
       const d = { list: r.list, total: r.total, by: {} };
       for (const c of cs) {
-        const s = one(`SELECT SUM(m.status='seen') AS seen, SUM(m.status='want') AS want, SUM(m.status='seen' AND m.tier IS NOT NULL) AS tiered,
-                       SUM(m.status='seen' AND ${NOTED_SQL}) AS noted, ROUND(AVG(CASE WHEN m.status='seen' THEN t.score END), 1) AS avg_score
-                       FROM lists l JOIN marks m ON m.tconst=l.tconst AND m.curator=? LEFT JOIN tiers t ON t.name=m.tier WHERE l.list=?`, [c.id, r.list]);
+        const s = one(`SELECT SUM(m.status='seen') AS seen, SUM(m.status='want') AS want, SUM(m.status='seen' AND m.score IS NOT NULL) AS tiered,
+                       SUM(m.status='seen' AND ${NOTED_SQL}) AS noted, ROUND(AVG(CASE WHEN m.status='seen' THEN m.score END), 1) AS avg_score,
+                       (SELECT COUNT(*) FROM queue qq JOIN lists l2 ON l2.tconst=qq.tconst AND l2.list=l.list WHERE qq.curator=m.curator) AS queued
+                       FROM lists l JOIN marks m ON m.tconst=l.tconst AND m.curator=? WHERE l.list=?`, [c.id, r.list]);
         d.by[c.id] = Object.fromEntries(Object.entries(s).map(([k, v]) => [k, k === "avg_score" ? v : (v || 0)]));
       }
       out.push(d);
@@ -331,7 +389,7 @@
 
   function recommend(p) {
     const c = checkCurator(p.get("curator") || DEFAULT_CURATOR), limit = Math.min(+(p.get("limit") || 60), 200);
-    const liked = q(`SELECT ${FILM_COLS}, t.score FROM marks m JOIN films f ON f.tconst=m.tconst JOIN tiers t ON t.name=m.tier WHERE m.status='seen' AND m.curator=?`, [c]);
+    const liked = q(`SELECT ${FILM_COLS}, m.score FROM marks m JOIN films f ON f.tconst=m.tconst WHERE m.status='seen' AND m.curator=? AND m.score IS NOT NULL`, [c]);
     if (liked.length < 3) return { films: [], reason: `tier at least 3 films you've seen first (${liked.length} so far). this is computed from your tiers.` };
     const n = liked.length, wd = {}, wk = {}, wl = {}, gs = {}, gc = {}, ds = {}, dc = {};
     const add = (o, k, v) => { o[k] = (o[k] || 0) + v; };
@@ -375,15 +433,26 @@
   function mark(m) {
     const c = checkCurator(m.curator || DEFAULT_CURATOR);
     if (![null, undefined, "seen", "want", "not"].includes(m.status)) throw new HttpError(400, "status must be seen, want, not or null");
-    const old = one("SELECT tier FROM marks WHERE curator=? AND tconst=?", [c, m.tconst]);
-    const keepRank = !!(old && old.tier === (m.tier ?? null));
-    run(`INSERT INTO marks (curator,tconst,status,tier,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
-         VALUES (?,?,?,?,NULL,?,?,?,?,?,?,?,?,'me',?)
-         ON CONFLICT(curator,tconst) DO UPDATE SET status=excluded.status, tier=excluded.tier, rank=${keepRank ? "rank" : "NULL"},
+    let score = m.score ?? null;
+    if (score == null && m.tier) score = scoreByName()[m.tier] ?? null;
+    if (score != null && !(score >= -10 && score <= 10)) throw new HttpError(400, "score must be between -10 and 10");
+    if ((m.feelings || []).length > 2) throw new HttpError(400, "two end-feelings at most: pick the ones that stayed");
+    const old = one("SELECT score FROM marks WHERE curator=? AND tconst=?", [c, m.tconst]);
+    const keepRank = !!(old && old.score === score);
+    run(`INSERT INTO marks (curator,tconst,status,score,tier,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
+         VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,?,?,'me',?)
+         ON CONFLICT(curator,tconst) DO UPDATE SET status=excluded.status, score=excluded.score, tier=NULL, rank=${keepRank ? "rank" : "NULL"},
          times=excluded.times, when_seen=excluded.when_seen, memory=excluded.memory, about=excluded.about, reached=excluded.reached,
          for_whom=excluded.for_whom, avoid=excluded.avoid, note=excluded.note, source='me', updated=excluded.updated`,
-      [c, m.tconst, m.status ?? null, m.tier ?? null, m.times ?? null, m.when_seen ?? null, m.memory ?? null,
+      [c, m.tconst, m.status ?? null, score, m.times ?? null, m.when_seen ?? null, m.memory ?? null,
         m.about ?? null, m.reached ?? null, m.for_whom ?? null, m.avoid ?? null, m.note ?? null, now()]);
+    run("DELETE FROM mark_feelings WHERE curator=? AND tconst=?", [c, m.tconst]);
+    for (const fe of m.feelings || []) {
+      const [raw, inten] = fe.split(":"), name = norm(raw); if (!name) continue;
+      run("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", [name, "custom", ""]);
+      run("INSERT OR REPLACE INTO mark_feelings VALUES (?,?,?,?)", [c, m.tconst, name, Math.min(3, Math.max(1, +(inten || 2)))]);
+    }
+    if (m.status === "seen" && (score != null || hasNote(m))) run("DELETE FROM queue WHERE curator=? AND tconst=?", [c, m.tconst]);
     run("DELETE FROM mark_tags WHERE curator=? AND tconst=?", [c, m.tconst]);
     for (const t of m.tags || []) {
       const neg = t.startsWith("-"), name = norm(neg ? t.slice(1) : t); if (!name) continue;
@@ -396,11 +465,26 @@
     return film(m.tconst, c);
   }
 
-  const VOCAB = { tag: ["tags", "mark_tags", "tag"], label: ["labels", "film_labels", "label"] };
+  const VOCAB = { tag: ["tags", "mark_tags", "tag"], label: ["labels", "film_labels", "label"], feeling: ["feelings", "mark_feelings", "feeling"] };
   function addVocab(kind, t) {
     const name = norm(t.name); if (!name) throw new HttpError(400, "empty name");
-    run(`INSERT OR IGNORE INTO ${VOCAB[kind][0]} VALUES (?,?)`, [name, (t.grp || "").trim() || "custom"]);
+    if (kind === "feeling") run("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", [name, (t.grp || "").trim() || "custom", ""]);
+    else run(`INSERT OR IGNORE INTO ${VOCAB[kind][0]} VALUES (?,?)`, [name, (t.grp || "").trim() || "custom"]);
     persist(); return { name };
+  }
+  function nameScore(x) {
+    if (!(x.score >= -10 && x.score <= 10)) throw new HttpError(400, "score must be between -10 and 10");
+    const name = (x.name || "").trim();
+    run("INSERT INTO scale VALUES (?,?) ON CONFLICT(score) DO UPDATE SET name=excluded.name", [x.score, name]);
+    event("scale", "", { score: x.score, name }, "vocab"); persist(); return { score: x.score, name };
+  }
+  function queueSet(x) {
+    const c = checkCurator(x.curator || DEFAULT_CURATOR);
+    if (x.on !== false) run("INSERT OR IGNORE INTO queue (curator,tconst,added) VALUES (?,?,?)", [c, x.tconst, now()]);
+    else run("DELETE FROM queue WHERE curator=? AND tconst=?", [c, x.tconst]);
+    event("queue", x.tconst, { on: x.on !== false }, "me", c); persist();
+    return { queued: q("SELECT curator FROM queue WHERE tconst=?", [x.tconst]).map(r => r.curator),
+      queues: Object.fromEntries(curators().map(cu => [cu.id, val("SELECT COUNT(*) FROM queue WHERE curator=?", [cu.id])])) };
   }
   function editVocab(kind, e) {
     const [table, usage, col] = VOCAB[kind]; let name = norm(e.name);
@@ -456,28 +540,28 @@
     return t => [w[t] || 0, n[t] || 0];
   }
   function ladder(p) {
-    const c = checkCurator(p.get("curator") || DEFAULT_CURATOR), tier = p.get("tier") || "";
-    const rows = filmQuery(c, "", "WHERE m.status='seen' AND m.tier=?", "f.title", [tier]), wr = winRates(c);
+    const c = checkCurator(p.get("curator") || DEFAULT_CURATOR), score = +(p.get("score") || 0);
+    const rows = filmQuery(c, "", "WHERE m.status='seen' AND m.score=?", "f.title", [score]), wr = winRates(c);
     for (const d of rows) { const [w, n] = wr(d.tconst); d.wins = w; d.duels = n; d.winrate = n ? Math.round(100 * w / n) / 100 : null; }
     rows.sort((x, y) => (x.rank == null) - (y.rank == null) || (x.rank || 0) - (y.rank || 0) || ((y.winrate ?? -1) - (x.winrate ?? -1)) || y.duels - x.duels || x.title.localeCompare(y.title));
-    return { tier, films: rows };
+    return { score, films: rows };
   }
   function saveLadder(l) {
     const c = checkCurator(l.curator || DEFAULT_CURATOR);
-    l.order.forEach((t, i) => run("UPDATE marks SET rank=?, updated=? WHERE curator=? AND tconst=? AND tier=?", [i + 1, now(), c, t, l.tier]));
-    event("ladder", "", { tier: l.tier, order: l.order }, "me", c); persist(); return { ok: true };
+    l.order.forEach((t, i) => run("UPDATE marks SET rank=?, updated=? WHERE curator=? AND tconst=? AND score=?", [i + 1, now(), c, t, l.score]));
+    event("ladder", "", { score: l.score, order: l.order }, "me", c); persist(); return { ok: true };
   }
 
   function pair(p) {
-    const c = checkCurator(p.get("curator") || DEFAULT_CURATOR), sameTier = +(p.get("same_tier") || 0), tier = p.get("tier") || "";
-    const seen = filmQuery(c, "", "WHERE m.status='seen'" + (tier ? " AND m.tier=?" : ""), "f.title", tier ? [tier] : []);
+    const c = checkCurator(p.get("curator") || DEFAULT_CURATOR), sameTier = +(p.get("same_tier") || 0), score = p.get("score") ?? "";
+    const seen = filmQuery(c, "", "WHERE m.status='seen'" + (score !== "" ? " AND m.score=?" : ""), "f.title", score !== "" ? [+score] : []);
     if (seen.length < 2) return { a: null, b: null, reason: "mark at least two films as seen first" };
     const done = new Set(q("SELECT a,b FROM pairs WHERE curator=?", [c]).map(r => [r.a, r.b].sort().join("|")));
     const pick = arr => arr[Math.floor(Math.random() * arr.length)];
     for (let i = 0; i < 300; i++) {
-      const a = pick(seen), same = seen.filter(f => f.tier === a.tier && f.tconst !== a.tconst);
-      if (sameTier && !(a.tier && same.length)) continue;
-      const cands = (a.tier && same.length && (sameTier || Math.random() < 0.7)) ? same : seen.filter(f => f.tconst !== a.tconst);
+      const a = pick(seen), same = seen.filter(f => f.score === a.score && f.tconst !== a.tconst), has = a.score != null;
+      if (sameTier && !(has && same.length)) continue;
+      const cands = (has && same.length && (sameTier || Math.random() < 0.7)) ? same : seen.filter(f => f.tconst !== a.tconst);
       const b = pick(cands);
       if (!done.has([a.tconst, b.tconst].sort().join("|"))) return { a, b };
     }
@@ -486,25 +570,52 @@
   function savePair(p) {
     if (![null, undefined, p.a, p.b].includes(p.winner)) throw new HttpError(400, "winner must be a, b or null");
     const c = checkCurator(p.curator || DEFAULT_CURATOR);
-    run("INSERT INTO pairs (ts,a,b,winner,skipped,curator) VALUES (?,?,?,?,?,?)", [now(), p.a, p.b, p.winner ?? null, p.winner ? 0 : 1, c]);
+    run("INSERT INTO pairs (ts,a,b,winner,skipped,curator,reason) VALUES (?,?,?,?,?,?,?)", [now(), p.a, p.b, p.winner ?? null, p.winner ? 0 : 1, c, (p.reason || "").trim() || null]);
     event("pair", p.winner || p.a, p, "me", c); persist();
     return { pairs: val("SELECT COUNT(*) FROM pairs WHERE curator=? AND skipped=0", [c]) };
   }
 
   function progress(p) {
-    const c = checkCurator(p.get("curator") || DEFAULT_CURATOR);
-    const agg = `COUNT(*) AS total, SUM(m.status='seen') AS seen, SUM(m.status='want') AS want, SUM(m.status='seen' AND m.tier IS NOT NULL) AS tiered,
-                 SUM(m.status='seen' AND ${NOTED_SQL}) AS noted, SUM(m.status IS NULL) AS unmarked`;
-    const base = "FROM films f LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=?";
+    const c = checkCurator(p.get("curator") || DEFAULT_CURATOR), cs = curators().map(x => x.id);
+    const KEYS = ["seen", "want", "tiered", "noted", "felt", "unmarked", "queued"];
+    const agg = `SUM(m.status='seen') AS seen, SUM(m.status='want') AS want, SUM(m.status='seen' AND m.score IS NOT NULL) AS tiered,
+                 SUM(m.status='seen' AND ${NOTED_SQL}) AS noted,
+                 SUM(m.status='seen' AND EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=f.tconst)) AS felt,
+                 SUM(m.status IS NULL) AS unmarked, SUM(EXISTS (SELECT 1 FROM queue qq WHERE qq.curator=? AND qq.tconst=f.tconst)) AS queued`;
+    const pick = r => Object.fromEntries(KEYS.map(k => [k, r[k] || 0]));
+    const table = (keySql, fromSql, groupSql, orderSql) => {
+      const rows = {};
+      for (const cu of cs) for (const r of q(`SELECT ${keySql} AS key, COUNT(*) AS total, ${agg} ${fromSql} LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=? ${groupSql} ${orderSql}`, [cu, cu])) {
+        const d = rows[r.key] ||= { key: r.key, total: r.total, by: {} }; d.by[cu] = pick(r);
+      }
+      return Object.values(rows);
+    };
     const genres = [...new Set(q("SELECT genres FROM films").flatMap(r => parts(r.genres, ",")))].sort();
-    const byGenre = genres.map(g => one(`SELECT ? AS key, ${agg} ${base} WHERE (',' || f.genres || ',') LIKE ?`, [g, c, `%,${g},%`]));
-    const byDecade = q(`SELECT f.decade AS key, ${agg} ${base} GROUP BY f.decade ORDER BY f.decade`, [c]);
-    const byLabel = q(`SELECT fl.label AS key, ${agg} FROM film_labels fl JOIN films f ON f.tconst=fl.tconst LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=? GROUP BY fl.label ORDER BY total DESC`, [c]);
-    const byList = q(`SELECT l.list AS key, ${agg} FROM lists l JOIN films f ON f.tconst=l.tconst LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=? GROUP BY l.list ORDER BY l.list`, [c]);
-    const tiers = q(`SELECT t.name AS key, t.ord, COUNT(m.tconst) AS total, SUM(m.rank IS NOT NULL) AS ranked FROM tiers t
-                     LEFT JOIN marks m ON m.tier=t.name AND m.curator=? AND m.status='seen' GROUP BY t.name ORDER BY t.ord`, [c]);
-    for (const rows of [byGenre, byDecade, byLabel, byList, tiers]) for (const d of rows) for (const k in d) if (d[k] == null && k !== "key") d[k] = 0;
-    return { curator: c, genre: byGenre, decade: byDecade, label: byLabel, list: byList, tier: tiers };
+    const byGenre = genres.map(g => { const d = { key: g, total: 0, by: {} };
+      for (const cu of cs) { const r = one(`SELECT COUNT(*) AS total, ${agg} FROM films f LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=? WHERE (',' || f.genres || ',') LIKE ?`, [cu, cu, `%,${g},%`]); d.total = r.total; d.by[cu] = pick(r); }
+      return d; });
+    const byDecade = table("f.decade", "FROM films f", "GROUP BY f.decade", "ORDER BY f.decade");
+    const byLabel = table("fl.label", "FROM film_labels fl JOIN films f ON f.tconst=fl.tconst", "GROUP BY fl.label", "ORDER BY total DESC");
+    const byList = table("l.list", "FROM lists l JOIN films f ON f.tconst=l.tconst", "GROUP BY l.list", "ORDER BY l.list");
+    const names = scaleName(), byScore = [];
+    for (let sc = 10; sc >= -10; sc--) { const d = { key: sc, name: names[sc], by: {} };
+      for (const cu of cs) { const r = one("SELECT COUNT(*) AS n, SUM(rank IS NOT NULL) AS ranked FROM marks WHERE curator=? AND status='seen' AND score=?", [cu, sc]); d.by[cu] = { n: r.n || 0, ranked: r.ranked || 0 }; }
+      byScore.push(d); }
+    const byFeeling = q("SELECT name, grp, es FROM feelings ORDER BY rowid").map(fe => { const d = { key: fe.name, grp: fe.grp, es: fe.es, by: {} };
+      for (const cu of cs) { const r = one("SELECT COUNT(*) AS n, SUM(intensity=3) AS strong FROM mark_feelings WHERE curator=? AND feeling=?", [cu, fe.name]); d.by[cu] = { n: r.n || 0, strong: r.strong || 0 }; }
+      return d; });
+    const summary = {};
+    for (const cu of cs) summary[cu] = one(`SELECT
+      (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen') AS seen,
+      (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen' AND score IS NOT NULL) AS tiered,
+      (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen' AND ${NOTED_SQL}) AS noted,
+      (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen' AND IFNULL(m.reached,'')<>'') AS reached,
+      (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen' AND EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=m.tconst)) AS felt,
+      (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='seen' AND EXISTS (SELECT 1 FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=m.tconst)) AS tagged,
+      (SELECT COUNT(*) FROM marks m WHERE curator=?1 AND status='want') AS want,
+      (SELECT COUNT(*) FROM queue WHERE curator=?1) AS queued,
+      (SELECT COUNT(*) FROM pairs WHERE curator=?1 AND skipped=0) AS pairs`, [cu]);
+    return { curator: c, curators: curators(), summary, genre: byGenre, decade: byDecade, label: byLabel, list: byList, score: byScore, feeling: byFeeling };
   }
 
   function pool(p) {
@@ -524,8 +635,9 @@
   }
 
   function exportJson() {
-    return { marks: [...markRows()], pairs: q("SELECT * FROM pairs ORDER BY id"), tiers: q("SELECT * FROM tiers ORDER BY ord"),
-      tags: q("SELECT * FROM tags ORDER BY grp,name"), labels: q("SELECT * FROM labels ORDER BY grp,name"), curators: curators() };
+    return { marks: [...markRows()], pairs: q("SELECT * FROM pairs ORDER BY id"), scale: q("SELECT * FROM scale ORDER BY score DESC"),
+      feelings: q("SELECT * FROM feelings"), tags: q("SELECT * FROM tags ORDER BY grp,name"), labels: q("SELECT * FROM labels ORDER BY grp,name"),
+      queue: q("SELECT * FROM queue ORDER BY curator, added"), curators: curators() };
   }
 
   // ---- router -----------------------------------------------------------------------
@@ -550,13 +662,15 @@
     }
     if (method === "POST") {
       if (r === "mark") return mark(body);
-      if (r === "tag" || r === "label") return addVocab(r, body);
-      if (r === "tag/edit" || r === "label/edit") return editVocab(seg[1], body);
+      if (r === "tag" || r === "label" || r === "feeling") return addVocab(r, body);
+      if (r === "tag/edit" || r === "label/edit" || r === "feeling/edit") return editVocab(seg[1], body);
+      if (r === "scale") return nameScore(body);
+      if (r === "queue") return queueSet(body);
       if (r === "ladder") return saveLadder(body);
       if (r === "pair") return savePair(body);
       if (r === "add") return add(body);
     }
-    if (method === "DELETE" && (seg[1] === "tag" || seg[1] === "label") && seg[2]) return deleteVocab(seg[1], decodeURIComponent(seg[2]));
+    if (method === "DELETE" && ["tag", "label", "feeling"].includes(seg[1]) && seg[2]) return deleteVocab(seg[1], decodeURIComponent(seg[2]));
     throw new HttpError(404, `no route ${method} ${path}`);
   }
 

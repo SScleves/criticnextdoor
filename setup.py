@@ -85,6 +85,16 @@ CREATE TABLE IF NOT EXISTS mark_tags (   -- one row per tag on a mark; polarity 
 CREATE TABLE IF NOT EXISTS labels (name TEXT PRIMARY KEY, grp TEXT);  -- your sub-genres: a property of the film, shared
 CREATE TABLE IF NOT EXISTS film_labels (tconst TEXT, label TEXT, PRIMARY KEY (tconst, label));
 CREATE INDEX IF NOT EXISTS idx_marks_tconst ON marks(tconst);
+CREATE TABLE IF NOT EXISTS feelings (name TEXT PRIMARY KEY, grp TEXT, es TEXT);  -- what the film leaves in you at the end
+CREATE TABLE IF NOT EXISTS mark_feelings (   -- at most two per mark, intensity 1..3
+  curator TEXT, tconst TEXT, feeling TEXT, intensity INTEGER DEFAULT 2,
+  PRIMARY KEY (curator, tconst, feeling)
+);
+CREATE TABLE IF NOT EXISTS scale (score INTEGER PRIMARY KEY, name TEXT);   -- -10..10, names are yours to edit
+CREATE TABLE IF NOT EXISTS queue (        -- "X writes this": who should sit down with the film. a to-do, not an opinion
+  curator TEXT, tconst TEXT, added TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (curator, tconst)
+);
 CREATE INDEX IF NOT EXISTS idx_mark_tags_tag ON mark_tags(tag);
 CREATE INDEX IF NOT EXISTS idx_films_decade ON films(decade);
 CREATE INDEX IF NOT EXISTS idx_films_rating ON films(rating);
@@ -96,14 +106,25 @@ CREATE INDEX IF NOT EXISTS idx_events_tconst ON events(tconst);
 MIGRATIONS = {
     "films": ["directors TEXT", "writers TEXT", "in_library INTEGER DEFAULT 0", "added TEXT",
               "rt INTEGER", "metacritic INTEGER", "omdb_checked INTEGER DEFAULT 0"],
-    "pairs": ["curator TEXT"],
+    "pairs": ["curator TEXT", "reason TEXT"],
+    "marks": ["score INTEGER"],
     "events": ["curator TEXT"],
 }
+
+FEELINGS = [  # (name, group, spanish). The visitor's first question is "what did you feel at the end?": same words here.
+    ("wrecked", "hit hard", "destrozado"), ("unsettled", "hit hard", "inquieto"), ("hollow", "hit hard", "vacío"),
+    ("shaken", "hit hard", "sacudido"),
+    ("warm", "hit warm", "reconfortado"), ("giddy", "hit warm", "eufórico"), ("cosy", "hit warm", "acogedor"),
+    ("moved", "hit warm", "conmovido"),
+    ("wired", "head", "con la cabeza a mil"), ("satisfied", "head", "redondo"), ("puzzled", "head", "descolocado"),
+    ("cheated", "let down", "estafado"), ("numb", "let down", "indiferente"), ("annoyed", "let down", "irritado"),
+    ("delighted-by-the-mess", "fun-bad", "encantado con el desastre"),
+]
 
 CURATORS = [("santi", "Santi", 1), ("paola", "Paola", 2)]
 DEFAULT_CURATOR = "santi"
 
-TIERS = [  # (name, score, order)  score feeds the recommender, name is what you see
+TIERS = [  # (name, score, order): the original tier names. They seed the -10..10 scale; the scale is what the app uses now.
     ("my favourite", 10, 1), ("top tier", 9, 2), ("excellent", 8, 3),
     ("very good", 7, 4), ("good", 6, 5), ("ok", 4, 6),
     ("meh", 1, 7),
@@ -138,6 +159,11 @@ def migrate(con):
     con.executemany("INSERT OR IGNORE INTO tiers VALUES (?,?,?)", TIERS)
     con.executemany("INSERT OR IGNORE INTO tags VALUES (?,?)", TAGS)
     con.executemany("INSERT OR IGNORE INTO curators VALUES (?,?,?)", CURATORS)
+    con.executemany("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", FEELINGS)
+    names = {score: name for name, score, _ in TIERS}
+    con.executemany("INSERT OR IGNORE INTO scale VALUES (?,?)", [(sc, names.get(sc, "")) for sc in range(10, -11, -1)])
+    # marks written before the scale: score from the tier name
+    con.execute("UPDATE marks SET score=(SELECT t.score FROM tiers t WHERE t.name=marks.tier) WHERE score IS NULL AND tier IS NOT NULL")
     migrate_to_curators(con)
     con.commit()
 

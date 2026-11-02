@@ -26,13 +26,16 @@ FILM_COLS = ("f.tconst,f.title,f.year,f.decade,f.runtime,f.genres,f.rating,f.vot
              "f.poster,f.overview,f.countries,f.language,f.keywords,f.in_library,f.rt,f.metacritic,"
              "(SELECT group_concat(l.list || '#' || l.rank, '|') FROM lists l WHERE l.tconst=f.tconst) AS lists,"
              "(SELECT group_concat(fl.label, ',') FROM film_labels fl WHERE fl.tconst=f.tconst) AS labels,"
-             "(SELECT group_concat(mm.curator || ':' || IFNULL(mm.status,'') || ':' || IFNULL(mm.tier,''), '|')"
-             " FROM marks mm WHERE mm.tconst=f.tconst) AS all_marks")
+             "(SELECT group_concat(mm.curator || ':' || IFNULL(mm.status,'') || ':' || IFNULL(mm.score,''), '|')"
+             " FROM marks mm WHERE mm.tconst=f.tconst) AS all_marks,"
+             "(SELECT group_concat(qq.curator, ',') FROM queue qq WHERE qq.tconst=f.tconst) AS queued")
 # the current curator's mark. `tags` is rebuilt as the old comma string so the page and exports stay simple
-MY_COLS = ("m.curator,m.status,m.tier,m.rank,m.times,m.when_seen,m.memory,m.about,m.reached,m.for_whom,m.avoid,"
-           "m.note,m.source,m.updated,"
+MY_COLS = ("m.curator,m.status,m.score,(SELECT sc.name FROM scale sc WHERE sc.score=m.score) AS tier,m.rank,"
+           "m.times,m.when_seen,m.memory,m.about,m.reached,m.for_whom,m.avoid,m.note,m.source,m.updated,"
            "(SELECT group_concat(CASE WHEN mt.polarity<0 THEN '-'||mt.tag ELSE mt.tag END, ',') FROM mark_tags mt"
-           " WHERE mt.curator=m.curator AND mt.tconst=m.tconst) AS tags")
+           " WHERE mt.curator=m.curator AND mt.tconst=m.tconst) AS tags,"
+           "(SELECT group_concat(mf.feeling || ':' || mf.intensity, ',') FROM mark_feelings mf"
+           " WHERE mf.curator=m.curator AND mf.tconst=m.tconst) AS feelings")
 NOTE_FIELDS = ("about", "reached", "for_whom", "avoid", "note")
 NOTED_SQL = "(IFNULL(m.about,'')<>'' OR IFNULL(m.reached,'')<>'' OR IFNULL(m.for_whom,'')<>'' OR IFNULL(m.avoid,'')<>'' OR IFNULL(m.note,'')<>'')"
 
@@ -72,13 +75,19 @@ def has_note(d):
 
 
 def mark_rows(con, curator=None):
-    sql = f"""SELECT {FILM_COLS},{MY_COLS},t.score FROM marks m JOIN films f ON f.tconst=m.tconst
-              LEFT JOIN tiers t ON t.name=m.tier {"WHERE m.curator=?" if curator else ""} ORDER BY m.curator, m.updated"""
+    sql = f"""SELECT {FILM_COLS},{MY_COLS} FROM marks m JOIN films f ON f.tconst=m.tconst
+              {"WHERE m.curator=?" if curator else ""} ORDER BY m.curator, m.updated"""
     for r in con.execute(sql, (curator,) if curator else ()):
         d = dict(r)
         d["tags_pos"], d["tags_neg"] = split_tags(d.pop("tags"))
         d["labels"] = parts(d["labels"], ",")
+        d["feelings"] = parts(d["feelings"], ",")   # "wrecked:3"
         yield d
+
+
+def scale_name(con):
+    """score -> label for people: the name if there is one, else the signed number."""
+    return {r["score"]: (r["name"] or f"{r['score']:+d}") for r in con.execute("SELECT * FROM scale")}
 
 
 # ---- exports: the product --------------------------------------------------
@@ -89,23 +98,28 @@ def notes_md(con, curator):
     model (or a person) can read without a schema. This is what phase 2 feeds to Claude.
     """
     name = con.execute("SELECT name FROM curators WHERE id=?", (curator,)).fetchone()
+    names = scale_name(con)
+    scale = ", ".join(f"{sc:+d} {names[sc]}" if names[sc] != f"{sc:+d}" else f"{sc:+d}" for sc in range(10, -11, -1))
+    feel = ", ".join(f"{r['name']} ({r['es']})" if r["es"] else r["name"] for r in con.execute("SELECT * FROM feelings"))
     out = [f"# {name[0] if name else curator}'s film notes", "",
-           "Tiers from best to worst: " + ", ".join(r[0] for r in con.execute("SELECT name FROM tiers ORDER BY ord")) + ".",
+           f"Score runs from +10 (best) to -10 (worst): {scale}.",
+           f"End-feeling is what the film left me with when it ended, intensity 1-3. The vocabulary: {feel}.",
            "Tags marked + are why the film worked for me; tags marked − are what went wrong.", ""]
     rows = [d for d in mark_rows(con, curator)
-            if d["status"] == "seen" and (d["tier"] or has_note(d) or d["tags_pos"] or d["tags_neg"])]
-    ords = {r[0]: r[1] for r in con.execute("SELECT name, ord FROM tiers")}
-    rows.sort(key=lambda d: (ords.get(d["tier"], 99), d["rank"] or 999, d["title"]))
+            if d["status"] == "seen" and (d["score"] is not None or has_note(d) or d["tags_pos"] or d["tags_neg"] or d["feelings"])]
+    rows.sort(key=lambda d: (-(d["score"] if d["score"] is not None else -99), d["rank"] or 999, d["title"]))
     for d in rows:
         out.append(f"## {d['title']} ({d['year']})")
-        line = [f"tier: {d['tier']}" if d["tier"] else "tier: none yet"]
-        if d["rank"]: line.append(f"rank in tier: {d['rank']}")
+        sc = d["score"]
+        line = [f"score: {sc:+d}" + (f" ({names[sc]})" if names.get(sc) != f"{sc:+d}" else "") if sc is not None else "score: none yet"]
+        if d["rank"]: line.append(f"rank at that score: {d['rank']}")
         if d["directors"]: line.append(f"director: {d['directors']}")
         if d["genres"]: line.append(f"imdb genres: {d['genres']}")
         if d["labels"]: line.append("labels: " + ", ".join(d["labels"]))
         if d["runtime"]: line.append(f"{d['runtime']} min")
         if d["language"]: line.append(f"language: {d['language']}")
         out.append("- " + " · ".join(line))
+        if d["feelings"]: out.append("- end-feeling: " + ", ".join(f"{f.split(':')[0]} {f.split(':')[1]}/3" for f in d["feelings"]))
         tags = [f"+{t}" for t in d["tags_pos"]] + [f"−{t}" for t in d["tags_neg"]]
         if tags: out.append("- tags: " + " ".join(tags))
         sits = [x for x in (d["times"], d["when_seen"], d["memory"]) if x]
@@ -119,7 +133,7 @@ def notes_md(con, curator):
 
 
 CSV_COLS = ["curator", "tconst", "title", "year", "directors", "genres", "labels", "countries", "language", "runtime",
-            "rating", "rt", "metacritic", "lists", "status", "tier", "score", "rank", "tags_pos", "tags_neg",
+            "rating", "rt", "metacritic", "lists", "status", "score", "tier", "rank", "feelings", "tags_pos", "tags_neg",
             "times", "when_seen", "memory", "about", "reached", "for_whom", "avoid", "note",
             "source", "updated", "in_library", "keywords", "overview"]
 
@@ -130,6 +144,7 @@ def csv_text(con, curator=None):
     w.writerow(CSV_COLS)
     for d in mark_rows(con, curator):
         d["tags_pos"] = " ".join(d["tags_pos"]); d["tags_neg"] = " ".join(d["tags_neg"]); d["labels"] = " ".join(d["labels"])
+        d["feelings"] = " ".join(d["feelings"])
         w.writerow([d.get(c) for c in CSV_COLS])
     return buf.getvalue()
 
@@ -151,7 +166,9 @@ def write_exports():
         dump("marks.jsonl", mark_rows(con))
         dump("pairs.jsonl", (dict(r) for r in con.execute("SELECT * FROM pairs ORDER BY id")))
         dump("events.jsonl", (dict(r) for r in con.execute("SELECT * FROM events ORDER BY id")))
-        dump("vocab.jsonl", [{"tiers": [dict(r) for r in con.execute("SELECT * FROM tiers ORDER BY ord")],
+        dump("queue.jsonl", (dict(r) for r in con.execute("SELECT * FROM queue ORDER BY curator, added")))
+        dump("vocab.jsonl", [{"scale": [dict(r) for r in con.execute("SELECT * FROM scale ORDER BY score DESC")],
+                              "feelings": [dict(r) for r in con.execute("SELECT * FROM feelings")],
                               "tags": [dict(r) for r in con.execute("SELECT * FROM tags ORDER BY grp,name")],
                               "labels": [dict(r) for r in con.execute("SELECT * FROM labels ORDER BY grp,name")],
                               "curators": curators(con)}])
@@ -198,7 +215,12 @@ def meta(curator: str = DEFAULT_CURATOR):
     check_curator(con, curator)
     genres = sorted({g for (gs,) in con.execute("SELECT genres FROM films") for g in gs.split(",") if g})
     decades = [r[0] for r in con.execute("SELECT DISTINCT decade FROM films ORDER BY decade")]
-    tiers = [dict(r) for r in con.execute("SELECT * FROM tiers ORDER BY ord")]
+    scale = [dict(r) for r in con.execute("""SELECT sc.score, sc.name,
+               (SELECT COUNT(*) FROM marks m WHERE m.score=sc.score AND m.curator=? AND m.status='seen') AS n
+               FROM scale sc ORDER BY sc.score DESC""", (curator,))]
+    feelings = [dict(r) for r in con.execute("""SELECT fe.name, fe.grp, fe.es,
+               (SELECT COUNT(*) FROM mark_feelings mf WHERE mf.feeling=fe.name AND mf.curator=?) AS n,
+               (SELECT COUNT(*) FROM mark_feelings mf WHERE mf.feeling=fe.name) AS n_all FROM feelings fe ORDER BY fe.rowid""", (curator,))]
     tags = [dict(r) for r in con.execute("""SELECT t.name, t.grp,
                (SELECT COUNT(*) FROM mark_tags mt WHERE mt.tag=t.name AND mt.curator=? AND mt.polarity>0) AS pos,
                (SELECT COUNT(*) FROM mark_tags mt WHERE mt.tag=t.name AND mt.curator=? AND mt.polarity<0) AS neg,
@@ -212,15 +234,19 @@ def meta(curator: str = DEFAULT_CURATOR):
         (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='want') AS want,
         (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='not') AS notseen,
         (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen' AND {NOTED_SQL}) AS noted,
-        (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen' AND tier IS NOT NULL) AS tiered,
+        (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen' AND score IS NOT NULL) AS tiered,
+        (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen' AND EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=m.tconst)) AS felt,
+        (SELECT COUNT(*) FROM queue WHERE curator=:c) AS queue,
         (SELECT COUNT(*) FROM pairs WHERE curator=:c AND skipped=0) AS pairs,
         (SELECT COUNT(*) FROM films WHERE in_library=1) AS library
     """, {"c": curator}).fetchone())
+    queues = {c["id"]: con.execute("SELECT COUNT(*) FROM queue WHERE curator=?", (c["id"],)).fetchone()[0] for c in curators(con)}
     return {"curator": curator, "curators": curators(con), "genres": genres, "decades": decades,
-            "tiers": tiers, "tags": tags, "labels": labels, "stats": stats}
+            "scale": scale, "feelings": feelings, "tags": tags, "labels": labels, "stats": stats, "queues": queues}
 
 
-def where_clause(genre, decade, status, tier, tag, q, library, lst="", label=""):
+def where_clause(genre, decade, status, tier, tag, q, library, lst="", label="", feeling="", queue="", score=""):
+    """queue = a curator id: only films in that person's to-write queue."""
     """Returns (join_sql, where_sql, args). The list join comes first, so its arg does too."""
     join, where, args = "", [], []
     if lst:
@@ -236,11 +262,19 @@ def where_clause(genre, decade, status, tier, tag, q, library, lst="", label="")
     elif status == "seen_nonote":
         where.append(f"m.status='seen' AND NOT {NOTED_SQL}")
     elif status == "seen_notier":
-        where.append("m.status='seen' AND m.tier IS NULL")
+        where.append("m.status='seen' AND m.score IS NULL")
+    elif status == "seen_nofeeling":
+        where.append("m.status='seen' AND NOT EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=f.tconst)")
     elif status:
         where.append("m.status = ?"); args.append(status)
-    if tier:
-        where.append("m.tier = ?"); args.append(tier)
+    if score != "" and score is not None:
+        where.append("m.score = ?"); args.append(int(score))
+    elif tier:   # old clients: a tier name
+        where.append("m.score = (SELECT score FROM scale WHERE name=?)"); args.append(tier)
+    if feeling:
+        where.append("EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=f.tconst AND mf.feeling=?)"); args.append(feeling)
+    if queue:
+        where.append("EXISTS (SELECT 1 FROM queue qq WHERE qq.curator=? AND qq.tconst=f.tconst)"); args.append(queue)
     if tag:
         where.append("EXISTS (SELECT 1 FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=f.tconst AND mt.tag=?)"); args.append(tag)
     if q:
@@ -261,17 +295,20 @@ def film_query(curator, join, where, order, args, limit=None, offset=0):
 
 
 @app.get("/api/films")
-def films(curator: str = DEFAULT_CURATOR, genre: str = "", decade: int = 0, status: str = "", tier: str = "",
-          tag: str = "", label: str = "", q: str = "", library: int = 0, lst: str = "", sort: str = "rating",
-          offset: int = 0, limit: int = Query(60, le=500)):
+def films(curator: str = DEFAULT_CURATOR, genre: str = "", decade: int = 0, status: str = "", tier: str = "", score: str = "",
+          tag: str = "", label: str = "", feeling: str = "", queue: str = "", q: str = "", library: int = 0, lst: str = "",
+          sort: str = "rating", offset: int = 0, limit: int = Query(60, le=500)):
     con = db()
     check_curator(con, curator)
-    join, where, args = where_clause(genre, decade, status, tier, tag, q, library, lst, label)
+    if queue in ("1", "me"):
+        queue = curator
+    join, where, args = where_clause(genre, decade, status, tier, tag, q, library, lst, label, feeling, queue, score)
     order = {"rating": "f.rating DESC, f.votes DESC", "votes": "f.votes DESC",
              "year": "f.year DESC", "year_asc": "f.year ASC", "title": "f.title",
              "updated": "m.updated DESC", "random": "RANDOM()",
              "rt": "f.rt DESC NULLS LAST, f.rating DESC",
-             "tier": "(SELECT ord FROM tiers t WHERE t.name=m.tier) ASC NULLS LAST, m.rank ASC NULLS LAST, f.rating DESC",
+             "tier": "m.score DESC NULLS LAST, m.rank ASC NULLS LAST, f.rating DESC",
+             "queue": "(SELECT added FROM queue qq WHERE qq.curator=m.curator AND qq.tconst=f.tconst) ASC, f.rating DESC",
              "rank": "lr.rank" if lst else "f.rating DESC"}.get(sort, "f.rating DESC")
     sql, a = film_query(curator, join, where, order, args, limit, offset)
     rows = [dict(r) for r in con.execute(sql, a)]
@@ -300,10 +337,11 @@ def lists():
         d = {"list": r["list"], "total": r["total"], "by": {}}
         for c in cs:
             s = con.execute(f"""SELECT SUM(m.status='seen') AS seen, SUM(m.status='want') AS want,
-                                       SUM(m.status='seen' AND m.tier IS NOT NULL) AS tiered,
+                                       SUM(m.status='seen' AND m.score IS NOT NULL) AS tiered,
                                        SUM(m.status='seen' AND {NOTED_SQL}) AS noted,
-                                       ROUND(AVG(CASE WHEN m.status='seen' THEN t.score END), 1) AS avg_score
-                                FROM lists l JOIN marks m ON m.tconst=l.tconst AND m.curator=? LEFT JOIN tiers t ON t.name=m.tier
+                                       ROUND(AVG(CASE WHEN m.status='seen' THEN m.score END), 1) AS avg_score,
+                                       (SELECT COUNT(*) FROM queue qq JOIN lists l2 ON l2.tconst=qq.tconst AND l2.list=l.list WHERE qq.curator=m.curator) AS queued
+                                FROM lists l JOIN marks m ON m.tconst=l.tconst AND m.curator=?
                                 WHERE l.list=?""", (c["id"], r["list"])).fetchone()
             d["by"][c["id"]] = {k: (s[k] if k == "avg_score" else (s[k] or 0)) for k in s.keys()}
         out.append(d)
@@ -321,8 +359,8 @@ def recommend(curator: str = DEFAULT_CURATOR, limit: int = Query(60, le=200), ls
     film comes back with its `why`. This is the placeholder the real recommender replaces.
     """
     con = db()
-    liked = con.execute(f"""SELECT {FILM_COLS}, t.score FROM marks m JOIN films f ON f.tconst=m.tconst
-                            JOIN tiers t ON t.name=m.tier WHERE m.status='seen' AND m.curator=?""", (curator,)).fetchall()
+    liked = con.execute(f"""SELECT {FILM_COLS}, m.score FROM marks m JOIN films f ON f.tconst=m.tconst
+                            WHERE m.status='seen' AND m.curator=? AND m.score IS NOT NULL""", (curator,)).fetchall()
     if len(liked) < 3:
         return {"films": [], "reason": f"tier at least 3 films you've seen first ({len(liked)} so far). this is computed from your tiers."}
     n = len(liked)
@@ -377,7 +415,9 @@ class Mark(BaseModel):
     curator: str = DEFAULT_CURATOR
     tconst: str
     status: str | None = None
-    tier: str | None = None
+    score: int | None = None          # -10..10
+    tier: str | None = None           # old clients: a scale name; ignored when score is given
+    feelings: list[str] = []          # "wrecked:3", at most two
     tags: list[str] = []              # "tag" = why it worked, "-tag" = what went wrong
     labels: list[str] | None = None   # film labels (shared between curators); None = leave as they are
     about: str | None = None
@@ -396,17 +436,34 @@ def mark(m: Mark):
     check_curator(con, m.curator)
     if m.status not in (None, "seen", "want", "not"):
         raise HTTPException(400, "status must be seen, want, not or null")
-    old = con.execute("SELECT tier FROM marks WHERE curator=? AND tconst=?", (m.curator, m.tconst)).fetchone()
-    keep_rank = bool(old and old["tier"] == m.tier)   # a tier change drops the film out of its old ladder
-    con.execute(f"""INSERT INTO marks (curator,tconst,status,tier,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
-                   VALUES (?,?,?,?,NULL,?,?,?,?,?,?,?,?,'me',datetime('now'))
-                   ON CONFLICT(curator,tconst) DO UPDATE SET status=excluded.status, tier=excluded.tier,
+    score = m.score
+    if score is None and m.tier:
+        r = con.execute("SELECT score FROM scale WHERE name=?", (m.tier,)).fetchone(); score = r["score"] if r else None
+    if score is not None and not -10 <= score <= 10:
+        raise HTTPException(400, "score must be between -10 and 10")
+    if len(m.feelings) > 2:
+        raise HTTPException(400, "two end-feelings at most: pick the ones that stayed")
+    old = con.execute("SELECT score FROM marks WHERE curator=? AND tconst=?", (m.curator, m.tconst)).fetchone()
+    keep_rank = bool(old and old["score"] == score)   # a score change drops the film out of its old ladder
+    con.execute(f"""INSERT INTO marks (curator,tconst,status,score,tier,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
+                   VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,?,?,'me',datetime('now'))
+                   ON CONFLICT(curator,tconst) DO UPDATE SET status=excluded.status, score=excluded.score, tier=NULL,
                    rank={"rank" if keep_rank else "NULL"},
                    times=excluded.times, when_seen=excluded.when_seen, memory=excluded.memory,
                    about=excluded.about, reached=excluded.reached, for_whom=excluded.for_whom, avoid=excluded.avoid,
                    note=excluded.note, source='me', updated=datetime('now')""",
-                (m.curator, m.tconst, m.status, m.tier, m.times, m.when_seen, m.memory,
+                (m.curator, m.tconst, m.status, score, m.times, m.when_seen, m.memory,
                  m.about, m.reached, m.for_whom, m.avoid, m.note))
+    con.execute("DELETE FROM mark_feelings WHERE curator=? AND tconst=?", (m.curator, m.tconst))
+    for fe in m.feelings:
+        name, _, inten = fe.partition(":")
+        name = norm(name)
+        if not name:
+            continue
+        inten = min(3, max(1, int(inten or 2)))
+        con.execute("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", (name, "custom", ""))
+        con.execute("INSERT OR REPLACE INTO mark_feelings VALUES (?,?,?,?)", (m.curator, m.tconst, name, inten))
+    con.execute("DELETE FROM queue WHERE curator=? AND tconst=?", (m.curator, m.tconst)) if m.status == "seen" and (score is not None or has_note(m.model_dump())) else None
     con.execute("DELETE FROM mark_tags WHERE curator=? AND tconst=?", (m.curator, m.tconst))
     for t in m.tags:
         pol, name = (-1, t[1:]) if t.startswith("-") else (1, t)
@@ -453,6 +510,7 @@ class VocabEdit(BaseModel):
 VOCAB = {  # kind -> (vocabulary table, usage table, usage column)
     "tag": ("tags", "mark_tags", "tag"),
     "label": ("labels", "film_labels", "label"),
+    "feeling": ("feelings", "mark_feelings", "feeling"),
 }
 
 
@@ -466,13 +524,21 @@ def add_label(t: Vocab):
     return add_vocab("label", t)
 
 
+@app.post("/api/feeling")
+def add_feeling(t: Vocab):
+    return add_vocab("feeling", t)
+
+
 def add_vocab(kind, t):
     table, _, _ = VOCAB[kind]
     name = norm(t.name)
     if not name:
         raise HTTPException(400, "empty name")
     con = db()
-    con.execute(f"INSERT OR IGNORE INTO {table} VALUES (?,?)", (name, t.grp.strip() or "custom"))
+    if kind == "feeling":
+        con.execute("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", (name, t.grp.strip() or "custom", ""))
+    else:
+        con.execute(f"INSERT OR IGNORE INTO {table} VALUES (?,?)", (name, t.grp.strip() or "custom"))
     con.commit()
     return {"name": name}
 
@@ -485,6 +551,51 @@ def edit_tag(e: VocabEdit):
 @app.post("/api/label/edit")
 def edit_label(e: VocabEdit):
     return edit_vocab("label", e)
+
+
+@app.post("/api/feeling/edit")
+def edit_feeling(e: VocabEdit):
+    return edit_vocab("feeling", e)
+
+
+class ScaleName(BaseModel):
+    score: int
+    name: str
+
+
+@app.post("/api/scale")
+def name_score(x: ScaleName):
+    """Give a step of the -10..10 scale a name (or take it away). Films keep their number."""
+    if not -10 <= x.score <= 10:
+        raise HTTPException(400, "score must be between -10 and 10")
+    con = db()
+    con.execute("INSERT INTO scale VALUES (?,?) ON CONFLICT(score) DO UPDATE SET name=excluded.name", (x.score, x.name.strip()))
+    event(con, "scale", "", {"score": x.score, "name": x.name.strip()}, source="vocab")
+    con.commit()
+    export_later()
+    return {"score": x.score, "name": x.name.strip()}
+
+
+class QueueItem(BaseModel):
+    curator: str = DEFAULT_CURATOR   # whose queue
+    tconst: str
+    on: bool = True
+
+
+@app.post("/api/queue")
+def queue_set(x: QueueItem):
+    """Put a film in someone's to-write queue (drag a poster onto their name), or take it out."""
+    con = db()
+    check_curator(con, x.curator)
+    if x.on:
+        con.execute("INSERT OR IGNORE INTO queue (curator, tconst) VALUES (?,?)", (x.curator, x.tconst))
+    else:
+        con.execute("DELETE FROM queue WHERE curator=? AND tconst=?", (x.curator, x.tconst))
+    event(con, "queue", x.tconst, {"on": x.on}, curator=x.curator)
+    con.commit()
+    export_later()
+    return {"queued": [r[0] for r in con.execute("SELECT curator FROM queue WHERE tconst=?", (x.tconst,))],
+            "queues": {c["id"]: con.execute("SELECT COUNT(*) FROM queue WHERE curator=?", (c["id"],)).fetchone()[0] for c in curators(con)}}
 
 
 def edit_vocab(kind, e):
@@ -523,6 +634,11 @@ def delete_tag(name: str):
 @app.delete("/api/label/{name}")
 def delete_label(name: str):
     return delete_vocab("label", name)
+
+
+@app.delete("/api/feeling/{name}")
+def delete_feeling(name: str):
+    return delete_vocab("feeling", name)
 
 
 def delete_vocab(kind, name):
@@ -585,11 +701,11 @@ def win_rates(con, curator):
 
 
 @app.get("/api/ladder")
-def ladder(tier: str, curator: str = DEFAULT_CURATOR):
-    """Films of one tier: ranked ones first in rank order, then the rest by compare-mode win rate."""
+def ladder(score: int, curator: str = DEFAULT_CURATOR):
+    """Films at one score: ranked ones first in rank order, then the rest by compare-mode win rate."""
     con = db()
     check_curator(con, curator)
-    sql, a = film_query(curator, "", "WHERE m.status='seen' AND m.tier=?", "f.title", [tier])
+    sql, a = film_query(curator, "", "WHERE m.status='seen' AND m.score=?", "f.title", [score])
     rows = [dict(r) for r in con.execute(sql, a)]
     wr = win_rates(con, curator)
     for d in rows:
@@ -598,12 +714,12 @@ def ladder(tier: str, curator: str = DEFAULT_CURATOR):
         d["winrate"] = round(w / n, 2) if n else None
     rows.sort(key=lambda d: (d["rank"] is None, d["rank"] or 0,
                              -(d["winrate"] if d["winrate"] is not None else -1), -d["duels"], d["title"]))
-    return {"tier": tier, "films": rows}
+    return {"score": score, "films": rows}
 
 
 class Ladder(BaseModel):
     curator: str = DEFAULT_CURATOR
-    tier: str
+    score: int
     order: list[str]
 
 
@@ -612,8 +728,8 @@ def save_ladder(l: Ladder):
     con = db()
     check_curator(con, l.curator)
     for i, t in enumerate(l.order, 1):
-        con.execute("UPDATE marks SET rank=? WHERE curator=? AND tconst=? AND tier=?", (i, l.curator, t, l.tier))
-    event(con, "ladder", "", {"tier": l.tier, "order": l.order}, curator=l.curator)
+        con.execute("UPDATE marks SET rank=?, updated=datetime('now') WHERE curator=? AND tconst=? AND score=?", (i, l.curator, t, l.score))
+    event(con, "ladder", "", {"score": l.score, "order": l.order}, curator=l.curator)
     con.commit()
     export_later()
     return {"ok": True}
@@ -622,12 +738,12 @@ def save_ladder(l: Ladder):
 # ---- compare: "which did you like more?" ----------------------------------
 
 @app.get("/api/pair")
-def pair(curator: str = DEFAULT_CURATOR, same_tier: int = 0, tier: str = ""):
+def pair(curator: str = DEFAULT_CURATOR, same_tier: int = 0, score: str = ""):
     con = db()
     check_curator(con, curator)
     where, args = "WHERE m.status='seen'", []
-    if tier:
-        where += " AND m.tier=?"; args.append(tier)
+    if score != "":
+        where += " AND m.score=?"; args.append(int(score))
     sql, a = film_query(curator, "", where, "f.title", args)
     seen = [dict(r) for r in con.execute(sql, a)]
     if len(seen) < 2:
@@ -635,11 +751,12 @@ def pair(curator: str = DEFAULT_CURATOR, same_tier: int = 0, tier: str = ""):
     done = {tuple(sorted((r[0], r[1]))) for r in con.execute("SELECT a,b FROM pairs WHERE curator=?", (curator,))}
     for _ in range(300):
         a = random.choice(seen)
-        same = [f for f in seen if f["tier"] == a["tier"] and f["tconst"] != a["tconst"]]
-        if same_tier and not (a["tier"] and same):
+        same = [f for f in seen if f["score"] == a["score"] and f["tconst"] != a["tconst"]]
+        has = a["score"] is not None
+        if same_tier and not (has and same):
             continue
-        # mostly compare inside a tier (that's where the order is unknown), sometimes across
-        cands = same if (a["tier"] and same and (same_tier or random.random() < 0.7)) else [f for f in seen if f["tconst"] != a["tconst"]]
+        # mostly compare at the same score (that's where the order is unknown), sometimes across
+        cands = same if (has and same and (same_tier or random.random() < 0.7)) else [f for f in seen if f["tconst"] != a["tconst"]]
         b = random.choice(cands)
         if tuple(sorted((a["tconst"], b["tconst"]))) not in done:
             return {"a": a, "b": b}
@@ -651,6 +768,7 @@ class Pair(BaseModel):
     a: str
     b: str
     winner: str | None = None
+    reason: str | None = None        # "because…": one line, in your words
 
 
 @app.post("/api/pair")
@@ -659,8 +777,8 @@ def save_pair(p: Pair):
         raise HTTPException(400, "winner must be a, b or null")
     con = db()
     check_curator(con, p.curator)
-    con.execute("INSERT INTO pairs (a,b,winner,skipped,curator) VALUES (?,?,?,?,?)",
-                (p.a, p.b, p.winner, 0 if p.winner else 1, p.curator))
+    con.execute("INSERT INTO pairs (a,b,winner,skipped,curator,reason) VALUES (?,?,?,?,?,?)",
+                (p.a, p.b, p.winner, 0 if p.winner else 1, p.curator, (p.reason or "").strip() or None))
     event(con, "pair", p.winner or p.a, p.model_dump(), curator=p.curator)
     con.commit()
     export_later()
@@ -671,30 +789,70 @@ def save_pair(p: Pair):
 
 @app.get("/api/progress")
 def progress(curator: str = DEFAULT_CURATOR):
-    """Per genre, decade, label and list: total / seen / tiered / noted / want / unmarked for this curator."""
+    """
+    Per genre, decade, label, list, feeling and score step: total films and, for EVERY curator side by
+    side, seen / scored / noted / felt / want / unmarked / queued. `curator` only picks the summary order.
+    """
     con = db()
     check_curator(con, curator)
-    agg = f"""COUNT(*) AS total, SUM(m.status='seen') AS seen, SUM(m.status='want') AS want,
-              SUM(m.status='seen' AND m.tier IS NOT NULL) AS tiered,
+    cs = [c["id"] for c in curators(con)]
+    agg = f"""SUM(m.status='seen') AS seen, SUM(m.status='want') AS want,
+              SUM(m.status='seen' AND m.score IS NOT NULL) AS tiered,
               SUM(m.status='seen' AND {NOTED_SQL}) AS noted,
-              SUM(m.status IS NULL) AS unmarked"""
-    base = "FROM films f LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=?"
+              SUM(m.status='seen' AND EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=f.tconst)) AS felt,
+              SUM(m.status IS NULL) AS unmarked,
+              SUM(EXISTS (SELECT 1 FROM queue qq WHERE qq.curator=? AND qq.tconst=f.tconst)) AS queued"""
+
+    def table(key_sql, from_sql, group_sql, order_sql, extra_args=()):
+        rows = {}
+        for c in cs:
+            for r in con.execute(f"SELECT {key_sql} AS key, COUNT(*) AS total, {agg} {from_sql} LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=? {group_sql} {order_sql}",
+                                 (c, c, *extra_args)):
+                d = rows.setdefault(r["key"], {"key": r["key"], "total": r["total"], "by": {}})
+                d["by"][c] = {k: (r[k] or 0) for k in ("seen", "want", "tiered", "noted", "felt", "unmarked", "queued")}
+        return list(rows.values())
+
     genres = sorted({g for (gs,) in con.execute("SELECT genres FROM films") for g in gs.split(",") if g})
-    by_genre = [dict(con.execute(f"SELECT ? AS key, {agg} {base} WHERE (',' || f.genres || ',') LIKE ?",
-                                 (g, curator, f"%,{g},%")).fetchone()) for g in genres]
-    by_decade = [dict(r) for r in con.execute(f"SELECT f.decade AS key, {agg} {base} GROUP BY f.decade ORDER BY f.decade", (curator,))]
-    by_label = [dict(r) for r in con.execute(f"""SELECT fl.label AS key, {agg} FROM film_labels fl JOIN films f ON f.tconst=fl.tconst
-                                                 LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=? GROUP BY fl.label ORDER BY total DESC""", (curator,))]
-    by_list = [dict(r) for r in con.execute(f"""SELECT l.list AS key, {agg} FROM lists l JOIN films f ON f.tconst=l.tconst
-                                                LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=? GROUP BY l.list ORDER BY l.list""", (curator,))]
-    tiers = [dict(r) for r in con.execute("""SELECT t.name AS key, t.ord, COUNT(m.tconst) AS total,
-                 SUM(m.rank IS NOT NULL) AS ranked FROM tiers t LEFT JOIN marks m ON m.tier=t.name AND m.curator=? AND m.status='seen'
-                 GROUP BY t.name ORDER BY t.ord""", (curator,))]
-    for rows in (by_genre, by_decade, by_label, by_list, tiers):
-        for d in rows:
-            for k in d:
-                if d[k] is None and k != "key": d[k] = 0
-    return {"curator": curator, "genre": by_genre, "decade": by_decade, "label": by_label, "list": by_list, "tier": tiers}
+    by_genre = []
+    for g in genres:   # the genre is a LIKE parameter, so these go one by one
+        d = {"key": g, "total": 0, "by": {}}
+        for c in cs:
+            r = con.execute(f"SELECT COUNT(*) AS total, {agg} FROM films f LEFT JOIN marks m ON m.tconst=f.tconst AND m.curator=? WHERE (',' || f.genres || ',') LIKE ?",
+                            (c, c, f"%,{g},%")).fetchone()
+            d["total"] = r["total"]; d["by"][c] = {k: (r[k] or 0) for k in ("seen", "want", "tiered", "noted", "felt", "unmarked", "queued")}
+        by_genre.append(d)
+    by_decade = table("f.decade", "FROM films f", "GROUP BY f.decade", "ORDER BY f.decade")
+    by_label = table("fl.label", "FROM film_labels fl JOIN films f ON f.tconst=fl.tconst", "GROUP BY fl.label", "ORDER BY total DESC")
+    by_list = table("l.list", "FROM lists l JOIN films f ON f.tconst=l.tconst", "GROUP BY l.list", "ORDER BY l.list")
+    names = scale_name(con)
+    by_score = []
+    for sc in range(10, -11, -1):
+        d = {"key": sc, "name": names[sc], "by": {}}
+        for c in cs:
+            r = con.execute("SELECT COUNT(*) AS n, SUM(rank IS NOT NULL) AS ranked FROM marks WHERE curator=? AND status='seen' AND score=?", (c, sc)).fetchone()
+            d["by"][c] = {"n": r["n"] or 0, "ranked": r["ranked"] or 0}
+        by_score.append(d)
+    by_feeling = []
+    for fe in con.execute("SELECT name, grp, es FROM feelings ORDER BY rowid"):
+        d = {"key": fe["name"], "grp": fe["grp"], "es": fe["es"], "by": {}}
+        for c in cs:
+            r = con.execute("SELECT COUNT(*) AS n, SUM(intensity=3) AS strong FROM mark_feelings WHERE curator=? AND feeling=?", (c, fe["name"])).fetchone()
+            d["by"][c] = {"n": r["n"] or 0, "strong": r["strong"] or 0}
+        by_feeling.append(d)
+    summary = {}
+    for c in cs:
+        summary[c] = dict(con.execute(f"""SELECT
+            (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen') AS seen,
+            (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen' AND score IS NOT NULL) AS tiered,
+            (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen' AND {NOTED_SQL}) AS noted,
+            (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen' AND IFNULL(m.reached,'')<>'') AS reached,
+            (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen' AND EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=m.tconst)) AS felt,
+            (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='seen' AND EXISTS (SELECT 1 FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=m.tconst)) AS tagged,
+            (SELECT COUNT(*) FROM marks m WHERE curator=:c AND status='want') AS want,
+            (SELECT COUNT(*) FROM queue WHERE curator=:c) AS queued,
+            (SELECT COUNT(*) FROM pairs WHERE curator=:c AND skipped=0) AS pairs""", {"c": c}).fetchone())
+    return {"curator": curator, "curators": curators(con), "summary": summary, "genre": by_genre, "decade": by_decade,
+            "label": by_label, "list": by_list, "score": by_score, "feeling": by_feeling}
 
 
 # ---- pool: add a film the filter left out ----------------------------------
@@ -757,9 +915,11 @@ def export_json():
     con = db()
     return {"marks": list(mark_rows(con)),
             "pairs": [dict(r) for r in con.execute("SELECT * FROM pairs ORDER BY id")],
-            "tiers": [dict(r) for r in con.execute("SELECT * FROM tiers ORDER BY ord")],
+            "scale": [dict(r) for r in con.execute("SELECT * FROM scale ORDER BY score DESC")],
+            "feelings": [dict(r) for r in con.execute("SELECT * FROM feelings")],
             "tags": [dict(r) for r in con.execute("SELECT * FROM tags ORDER BY grp,name")],
             "labels": [dict(r) for r in con.execute("SELECT * FROM labels ORDER BY grp,name")],
+            "queue": [dict(r) for r in con.execute("SELECT * FROM queue ORDER BY curator, added")],
             "curators": curators(con)}
 
 
