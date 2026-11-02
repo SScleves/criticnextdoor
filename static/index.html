@@ -89,6 +89,7 @@
     <button data-m="browse" class="on" title="grid, click a poster">browse</button>
     <button data-m="triage" title="one film at a time, keyboard: S W N → ←">triage</button>
     <button data-m="compare" title="which did you like more? ← → ↓">compare</button>
+    <button data-m="foryou" title="unseen films that look like what you tiered high">for you</button>
   </div>
   <div id="filters">
     <input type="search" id="q" placeholder="title or director…">
@@ -103,8 +104,11 @@
     </select>
     <select id="tier"><option value="">any tier</option></select>
     <select id="tag"><option value="">any tag</option></select>
+    <select id="lst"><option value="">any list</option></select>
     <select id="sort">
       <option value="rating">by IMDb rating</option>
+      <option value="rt">by Rotten Tomatoes</option>
+      <option value="rank">by list rank</option>
       <option value="votes">by popularity</option>
       <option value="year">newest first</option>
       <option value="year_asc">oldest first</option>
@@ -143,13 +147,16 @@ async function loadMeta(){
   $("#tier").innerHTML = `<option value="">any tier</option>` + META.tiers.map(t=>`<option>${t.name}</option>`).join("");
   $("#tag").innerHTML = `<option value="">any tag</option>` + META.tags.map(t=>`<option>${t.name}</option>`).join("");
   $("#genre").value = g; $("#decade").value = d; $("#tier").value = ti; $("#tag").value = ta;
+  const l = $("#lst").value, L = await api("/api/lists");
+  $("#lst").innerHTML = `<option value="">any list</option>` + L.lists.map(x=>`<option value="${esc(x.list)}">${esc(x.list)} · seen ${x.seen||0}/${x.total}${x.avg_score!=null?` · avg ${x.avg_score}`:""}</option>`).join("");
+  $("#lst").value = l;
   const s = META.stats; state.pairs = s.pairs;
   $("#stats").innerHTML = `<b>${s.seen}</b> seen · <b>${s.tiered}</b> tiered · <b>${s.noted}</b> with notes · <b>${s.pairs}</b> compared · <b>${s.want}</b> want · ${s.total} total`;
 }
 
 function params(){
   const p = new URLSearchParams();
-  for (const id of ["q","genre","decade","status","tier","tag","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
+  for (const id of ["q","genre","decade","status","tier","tag","lst","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
   if ($("#lib").checked) p.set("library", "1");
   p.set("offset", state.offset); p.set("limit", 60);
   return p;
@@ -171,8 +178,10 @@ function setMode(m){
   state.mode = m;
   document.querySelectorAll(".modes button").forEach(b => b.classList.toggle("on", b.dataset.m === m));
   $("#filters").style.display = m === "compare" ? "none" : "";
-  if (m === "compare") loadPair(); else render();
+  if (m === "compare") loadPair(); else if (m === "foryou") loadForYou(); else render();
 }
+
+const listsLine = f => f.lists ? `<div class="d" title="${esc(f.lists.replace(/\|/g,"  "))}">${esc(f.lists.split("|").map(x=>x.replace("#"," #")).join(" · "))}</div>` : "";
 
 function card(f){
   const poster = f.poster ? `<img loading="lazy" src="${IMG}${f.poster}" alt="">` : `<span>${esc(f.title)}<br><small>${f.year}</small></span>`;
@@ -180,14 +189,29 @@ function card(f){
   const tier = f.tier ? `<span class="tier">${esc(f.tier)}</span>` : "";
   return `<div class="card" data-id="${f.tconst}">${badge}${tier}<div class="poster">${poster}</div>
     <div class="cap"><div class="t">${esc(f.title)}</div>
-    <div class="s">${f.year} · ★ ${f.rating} · ${f.runtime||"?"} min${f.in_library?' · <span class="lib" title="in your library">●</span>':''}</div>
-    <div class="d">${esc(f.directors||"")}</div></div></div>`;
+    <div class="s">${f.year} · ★ ${f.rating}${f.rt!=null?` · 🍅 ${f.rt}`:""} · ${f.runtime||"?"} min${f.in_library?' · <span class="lib" title="in your library">●</span>':''}</div>
+    <div class="d">${esc(f.directors||"")}</div>${listsLine(f)}</div></div>`;
 }
 
 function render(){
   if (state.mode === "browse") renderGrid();
   else if (state.mode === "triage") renderOne();
+  else if (state.mode === "foryou") renderForYou();
   else renderPair();
+}
+
+// ---- for you: baseline taste match (replace with the real model later) ----
+async function loadForYou(){
+  const p = new URLSearchParams(); for (const id of ["lst","genre"]) { const v = $("#"+id).value; if (v) p.set(id, v); }
+  state.rec = await api("/api/recommend?" + p); renderForYou();
+}
+function renderForYou(){
+  const r = state.rec, main = $("#main");
+  if (!r) { main.innerHTML = `<div class="center">…</div>`; return; }
+  if (!r.films.length) { main.innerHTML = `<div class="center">${esc(r.reason||"nothing to show")}</div>`; return; }
+  state.films = r.films; state.total = r.films.length; state.offset = r.films.length;
+  main.innerHTML = `<div class="count"><span>${r.films.length} unseen films that look like what you tiered, based on ${r.based_on} tiered films. director &gt; themes &gt; genre &gt; decade; what you hated counts against.</span></div>
+    <div class="grid">${r.films.map(f => `<div>${card(f)}<div class="d" style="margin-top:4px;white-space:normal">${f.score} · ${esc(f.why.join(" · "))}</div></div>`).join("")}</div>`;
 }
 
 function renderGrid(){
@@ -281,7 +305,7 @@ function openModal(f, adv=false){
   const opts = (map, cur, blank) => `<option value="">${blank}</option>` + Object.entries(map).map(([k,v])=>`<option value="${k}" ${k===cur?"selected":""}>${v}</option>`).join("");
   $("#modal").innerHTML = `
     <div>${f.poster?`<img src="${IMG}${f.poster}">`:""}
-      <div class="meta" style="margin-top:8px">${esc(f.directors||"")}<br>IMDb ★ ${f.rating} (${(f.votes/1000|0)}k votes)<br>${esc(f.genres)}<br>${esc(f.countries||"")}${f.in_library?'<br><span class="lib">● in your library</span>':''}</div>
+      <div class="meta" style="margin-top:8px">${esc(f.directors||"")}<br>IMDb ★ ${f.rating} (${(f.votes/1000|0)}k votes)${f.rt!=null?`<br>🍅 ${f.rt}%${f.metacritic!=null?` · MC ${f.metacritic}`:""}`:""}<br>${esc(f.genres)}<br>${esc(f.countries||"")}${f.in_library?'<br><span class="lib">● in your library</span>':''}${f.lists?`<br>${esc(f.lists.split("|").map(x=>x.replace("#"," #")).join("<br>"))}`.replace(/&lt;br&gt;/g,"<br>"):""}</div>
       <div class="meta" style="font-size:11px">${esc((f.keywords||"").split(",").slice(0,12).join(" · "))}</div>
     </div>
     <div>
@@ -382,7 +406,7 @@ document.onkeydown = e => {
   if (state.mode === "triage") { const k = {s:"s",S:"s",w:"w",W:"w",n:"n",N:"n",ArrowRight:"skip",ArrowLeft:"back"}[e.key]; if (k) { e.preventDefault(); triage(k); } }
   if (state.mode === "compare") { const k = {ArrowLeft:"a",ArrowRight:"b",ArrowDown:"skip"}[e.key]; if (k) { e.preventDefault(); pick(k); } }
 };
-["genre","decade","status","tier","tag","sort","lib"].forEach(id => $("#"+id).onchange = () => load());
+["genre","decade","status","tier","tag","lst","sort","lib"].forEach(id => $("#"+id).onchange = () => state.mode === "foryou" ? loadForYou() : load());
 let deb; $("#q").oninput = () => { clearTimeout(deb); deb = setTimeout(()=>load(), 250); };
 
 loadMeta().then(()=>load());

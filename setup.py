@@ -65,6 +65,11 @@ CREATE TABLE IF NOT EXISTS pairs (       -- "which did you like more?" answers
   winner TEXT,          -- a or b's tconst; NULL = couldn't say
   skipped INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS lists (       -- external top lists: IMDb Top 250, TSPDT, your Letterboxd lists...
+  list TEXT, rank INTEGER, tconst TEXT,
+  PRIMARY KEY (list, tconst)
+);
+CREATE INDEX IF NOT EXISTS idx_lists_tconst ON lists(tconst);
 CREATE TABLE IF NOT EXISTS tiers (name TEXT PRIMARY KEY, score INTEGER, ord INTEGER);
 CREATE TABLE IF NOT EXISTS tags (name TEXT PRIMARY KEY, grp TEXT);
 CREATE INDEX IF NOT EXISTS idx_films_decade ON films(decade);
@@ -75,7 +80,8 @@ CREATE INDEX IF NOT EXISTS idx_events_tconst ON events(tconst);
 
 # columns added after the first release; ALTERed in when an older films.db lacks them
 MIGRATIONS = {
-    "films": ["directors TEXT", "writers TEXT", "in_library INTEGER DEFAULT 0", "added TEXT"],
+    "films": ["directors TEXT", "writers TEXT", "in_library INTEGER DEFAULT 0", "added TEXT",
+              "rt INTEGER", "metacritic INTEGER", "omdb_checked INTEGER DEFAULT 0"],
     "my": ["times TEXT", "when_seen TEXT", "memory TEXT", "source TEXT"],
 }
 

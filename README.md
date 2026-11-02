@@ -38,6 +38,34 @@ The write-up (seen films): tier · how often / when / how well you remember it �
 tags, where one click = `+` (this is why it worked) and two = `−` (this is what
 went wrong) · the note. Write the note for a person, not for the machine.
 
+- **for you** — unseen films scored by what they share with what you tiered: director >
+  TMDB themes > genre > decade, list membership and your want list as small boosts, what you
+  hated counts against. Every card says *why*. It's an explainable baseline, not the model;
+  it's the thing the real recommender replaces. Needs ≥3 tiered films.
+
+## Lists and critic scores
+
+```bash
+.venv/bin/python lists.py imdb-top                            # IMDb Top 250, computed offline (same formula)
+.venv/bin/python lists.py csv "TSPDT 1000" tspdt.csv          # any CSV: tt… ids, or Name,Year columns
+.venv/bin/python lists.py url "S&S 2022" https://…            # a page with imdb.com/title/tt… links, in order
+.venv/bin/python lists.py letterboxd ~/letterboxd-export      # YOUR export: watched/ratings/watchlist + lists/*.csv
+.venv/bin/python lists.py show
+```
+
+Lists show up as a filter ("IMDb Top 250 · seen 40/250 · avg 6.2"), as a sort ("by list rank"),
+on each card, and as a boost in *for you*. Letterboxd blocks automated reads of other people's
+lists, so for those: your own export, or copy the list into a `Name,Year` CSV.
+
+Rotten Tomatoes has no API; OMDb relays its score. Free key at https://www.omdbapi.com/apikey.aspx
+(1000/day → the catalogue takes ~7 days; the $1/month tier does it in one go):
+
+```bash
+OMDB_API_KEY=xxx .venv/bin/python enrich_omdb.py              # resumes where it stopped
+```
+
+Adds 🍅 and Metacritic to cards, "by Rotten Tomatoes" to the sort, `rt`/`metacritic` to exports.
+
 ## Where your words live
 
 - `films.db` — everything, sqlite. `my` is the current state, `events` is the
