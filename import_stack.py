@@ -16,6 +16,10 @@ from collections import Counter, defaultdict
 import requests
 
 from app import DB, add_from_pool, event, write_exports
+from setup import DEFAULT_CURATOR
+
+# Plex history is household viewing with no name on it: it lands on one curator (FILMCAT_IMPORT_CURATOR to change)
+CURATOR = os.environ.get("FILMCAT_IMPORT_CURATOR", DEFAULT_CURATOR)
 
 STACK = os.environ.get("MEDIA_STACK", "/opt/media/configs")
 TAUTULLI = os.environ.get("TAUTULLI_URL", "http://localhost:8181")
@@ -57,7 +61,7 @@ def tautulli(con):
     by_title = defaultdict(list)
     for t, title, year in con.execute("SELECT tconst, title, year FROM pool"):
         by_title[(title.lower(), year)].append(t)
-    marked = {r[0] for r in con.execute("SELECT tconst FROM my")}
+    marked = {r[0] for r in con.execute("SELECT tconst FROM marks WHERE curator=?", (CURATOR,))}
 
     titles = {r["rating_key"]: (r["title"], r.get("year")) for r in watched}
     imported, already, unmatched = 0, 0, []
@@ -81,9 +85,9 @@ def tautulli(con):
             already += 1; continue
         when = dt.datetime.fromtimestamp(last[rk]).strftime("%Y-%m-%d %H:%M:%S")
         times = "once" if plays[rk] == 1 else "few"
-        con.execute("""INSERT INTO my (tconst,status,times,source,updated) VALUES (?,'seen',?,'tautulli',?)""",
-                    (tconst, times, when))
-        event(con, "import", tconst, {"status": "seen", "plays": plays[rk], "last_watched": when}, source="tautulli")
+        con.execute("""INSERT INTO marks (curator,tconst,status,times,source,updated) VALUES (?,?,'seen',?,'tautulli',?)""",
+                    (CURATOR, tconst, times, when))
+        event(con, "import", tconst, {"status": "seen", "plays": plays[rk], "last_watched": when}, source="tautulli", curator=CURATOR)
         marked.add(tconst); imported += 1
     con.commit()
     print(f"  {imported} marked seen, {already} already had a mark, {len(unmatched)} unmatched")

@@ -5,10 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>critic next door</title>
 <style>
-  :root{--bg:#121214;--panel:#1b1b1f;--panel2:#222228;--line:#2a2a30;--fg:#e8e6e1;--mute:#8d8a84;--acc:#e5b53d;--neg:#d9534f;--seen:#4caf7d;--want:#5b9cf6;--not:#6b6b73;--radius:8px;--p:#c38bd9}
+  :root{--bg:#121214;--panel:#1b1b1f;--panel2:#222228;--line:#2a2a30;--fg:#e8e6e1;--mute:#8d8a84;--acc:#e5b53d;--neg:#d9534f;--seen:#4caf7d;--want:#5b9cf6;--not:#6b6b73;--radius:8px;--p:#c38bd9;--who:#e5b53d;--who-soft:#3a3120}
+  body[data-curator="paola"]{--who:#c38bd9;--who-soft:#352a3d}
+  .c-santi{--who:#e5b53d} .c-paola{--who:#c38bd9}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);border-top:4px solid var(--who);padding:8px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   header h1{font-size:17px;margin:0 8px 0 0;color:var(--acc);letter-spacing:.5px;white-space:nowrap}
   select,input[type=search],input[type=text],button,textarea{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font:inherit}
   input[type=search]{min-width:180px}
@@ -16,8 +18,12 @@
   button.primary{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
   .modes,.who{display:flex;gap:4px}
   .modes button.on{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
-  .who button.on{background:var(--fg);color:#111;border-color:var(--fg);font-weight:600}
-  .who{border:1px solid var(--line);border-radius:6px;padding:2px} .who button{border:none;padding:4px 10px}
+  .who{gap:6px} .who button{border:2px solid var(--line);padding:5px 12px;font-weight:600;font-size:14px;display:flex;align-items:center;gap:7px;border-radius:8px}
+  .who button .q{font-size:11px;font-weight:500;color:var(--mute);background:var(--bg);padding:1px 7px;border-radius:9px}
+  .who button.c-santi{border-color:var(--who)} .who button.c-paola{border-color:var(--who)}
+  .who button.on{background:var(--who);color:#111} .who button.on .q{background:rgba(0,0,0,.25);color:#111}
+  .who button.drop{outline:3px dashed var(--who);outline-offset:2px;transform:scale(1.05)}
+  .who-hint{font-size:11px;color:var(--mute);max-width:120px;line-height:1.2}
   #filters{display:contents}
   label.chk{display:flex;align-items:center;gap:5px;color:var(--mute);font-size:13px;cursor:pointer}
   .stats{margin-left:auto;color:var(--mute);font-size:13px}
@@ -39,7 +45,9 @@
   .badge.seen{background:var(--seen)} .badge.want{background:var(--want)} .badge.not{background:var(--not)}
   .tier{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.75);color:var(--acc);font-size:11px;padding:2px 6px;border-radius:4px;font-weight:600;z-index:1;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .others{position:absolute;bottom:6px;left:6px;display:flex;gap:4px;z-index:1}
-  .others span{background:rgba(0,0,0,.8);color:var(--p);font-size:10px;padding:1px 6px;border-radius:10px;border:1px solid var(--p);font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .others span{background:rgba(0,0,0,.8);font-size:10px;padding:1px 6px;border-radius:10px;border:1px solid var(--who);color:var(--who);font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .qbadge{position:absolute;bottom:6px;right:6px;z-index:1;display:flex;gap:3px} .qbadge span{font-size:10px;background:var(--who);color:#111;padding:1px 6px;border-radius:9px;font-weight:700}
+  .card.dragging{opacity:.5}
   .more{display:block;margin:20px auto;padding:10px 24px}
   .center{text-align:center;color:var(--mute);margin:14px 0}
   kbd{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px}
@@ -100,6 +108,20 @@
   .chip.on{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600} .chip.on::before{content:"+ "}
   .chip.neg{background:var(--neg);color:#fff;border-color:var(--neg);font-weight:600} .chip.neg::before{content:"− "}
   .chip.lab{border-color:#4a4a55} .chip.lab.on{background:var(--p);border-color:var(--p);color:#111} .chip.lab.on::before{content:""}
+  .chip.feel{border-color:#4a4a55} .chip.feel.on{background:#3a6b8f;border-color:#3a6b8f;color:#fff;font-weight:600} .chip.feel.on::before{content:""}
+  .chip.feel.i1{background:#2b4a60} .chip.feel.i3{background:#5a9ad0;color:#111} .chip.feel .es{color:var(--mute);font-size:10px;margin-left:3px} .chip.feel.on .es{color:inherit;opacity:.8}
+  .scale{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+  .scale button{padding:4px 5px;font-size:12px;font-variant-numeric:tabular-nums;border-radius:6px;line-height:1.2;min-width:0;text-align:left;display:flex;gap:4px;align-items:baseline}
+  .scale button small{font-size:10px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .scale button.on{background:var(--acc);color:#111;border-color:var(--acc);font-weight:700} .scale button.on small{color:#111}
+  .scale button.neg{border-color:#4a3030} .scale button.neg.on{background:var(--neg);border-color:var(--neg);color:#fff} .scale button.neg.on small{color:#fff}
+  .scale-name{display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:var(--mute)} .scale-name input{flex:1;padding:3px 6px;font-size:12px;min-width:0}
+  .guide{font-size:11px;color:var(--mute);text-align:right;margin-top:2px} .guide.over{color:var(--acc)}
+  .reason{display:flex;gap:8px;max-width:620px;margin:14px auto 0;align-items:center} .reason input{flex:1}
+  .sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:16px;max-width:960px}
+  .sum .box{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--who);border-radius:8px;padding:10px 14px}
+  .sum .box h3{margin:0 0 6px;font-size:16px;color:var(--who)} .sum .box .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13px} .sum .box .kv b{font-variant-numeric:tabular-nums;text-align:right}
+  .by{display:inline-flex;gap:6px;align-items:baseline;font-variant-numeric:tabular-nums} .by i{font-style:normal;font-size:10px;font-weight:700;color:var(--who)}
   .chip.sug{border-style:dashed} .chip .c{color:var(--mute);font-size:10px;margin-left:4px} .chip.on .c,.chip.neg .c{color:inherit;opacity:.7}
   .grp{font-size:11px;color:var(--mute);margin:6px 0 2px;width:100%}
   textarea{width:100%;resize:vertical;line-height:1.45;font-size:15px}
@@ -120,14 +142,14 @@
 <body>
 <header>
   <h1>critic next door</h1>
-  <div class="who" id="who" title="who is marking"></div>
+  <div class="who" id="who" title="who is marking · drag a poster onto a name to put it in that person's to-write queue"></div>
   <div class="modes">
     <button data-m="browse" title="the grid: click a poster, write it up">browse</button>
     <button data-m="triage" title="one film at a time, keyboard: S W N → ←">triage</button>
     <button data-m="compare" title="which did you like more? ← → ↓">compare</button>
-    <button data-m="ladder" title="order the films inside a tier">ladder</button>
+    <button data-m="ladder" title="order the films at one score">ladder</button>
     <button data-m="progress" title="where the gaps are">progress</button>
-    <button data-m="tags" title="rename, merge and group tags and labels">tags</button>
+    <button data-m="tags" title="the vocabulary: scale names, end-feelings, tags, labels">words</button>
     <button data-m="foryou" title="unseen films that look like what you tiered high">for you</button>
   </div>
   <div id="filters">
@@ -140,18 +162,21 @@
       <option value="unmarked">unmarked</option>
       <option value="seen">seen</option>
       <option value="seen_nonote">seen, no note yet</option>
-      <option value="seen_notier">seen, no tier yet</option>
+      <option value="seen_notier">seen, no score yet</option>
+      <option value="seen_nofeeling">seen, no end-feeling yet</option>
       <option value="want">want to see</option>
       <option value="not">not seen</option>
     </select>
-    <select id="tier"><option value="">any tier</option></select>
+    <select id="score"><option value="">any score</option></select>
+    <select id="feeling"><option value="">any end-feeling</option></select>
     <select id="tag"><option value="">any tag</option></select>
     <select id="lst"><option value="">any list</option></select>
     <select id="sort">
       <option value="rating">by IMDb rating</option>
       <option value="rt">by Rotten Tomatoes</option>
       <option value="rank">by list rank</option>
-      <option value="tier">by my tier</option>
+      <option value="tier">by my score</option>
+      <option value="queue">queue order</option>
       <option value="votes">by popularity</option>
       <option value="year">newest first</option>
       <option value="year_asc">oldest first</option>
@@ -159,6 +184,7 @@
       <option value="updated">last marked</option>
       <option value="random">shuffle</option>
     </select>
+    <label class="chk"><input type="checkbox" id="queue"> my queue</label>
     <label class="chk"><input type="checkbox" id="lib"> in my library</label>
   </div>
   <div class="dl" id="dl"><button>export ▾</button><div class="menu" id="dlmenu"></div></div>
@@ -168,11 +194,11 @@
 
 <div class="ov" id="ov"><div class="sheet" id="sheet"></div></div>
 
-<script src="shim.js?v=a34395eb"></script>
+<script src="shim.js?v=19091d31"></script>
 <script>
 const IMG = "https://image.tmdb.org/t/p/w342";
 const MODES = ["browse","triage","compare","ladder","progress","tags","foryou"];
-let META, LISTS = [], state = {mode:"browse", offset:0, films:[], total:0, i:0, pair:null, pairs:0, ladderTier:"", progTab:"genre", sameTier:false, pairTier:""};
+let META, LISTS = [], state = {mode:"browse", offset:0, films:[], total:0, i:0, pair:null, pairs:0, ladderScore:null, progTab:"genre", sameTier:false, pairScore:"", picked:null};
 let current = null, advance = false, saveTimer = null, dirty = false, curator = localStorage.getItem("curator") || "";
 
 const $ = s => document.querySelector(s);
@@ -188,40 +214,50 @@ const WHEN = {recent:"recently", years:"years ago", kid:"as a kid / teen"};
 const MEMORY = {clear:"remember it clearly", fuzzy:"fuzzy memory"};
 const curName = id => (META.curators.find(c=>c.id===id)||{name:id}).name;
 const otherMarks = f => (f.all_marks||"").split("|").filter(Boolean).map(x=>x.split(":")).filter(([c,s])=>c!==curator && s);
+const signed = n => (n > 0 ? "+" : "") + n;
+const scaleName = sc => { const x = META.scale.find(s=>s.score===+sc); return x && x.name ? x.name : signed(+sc); };   // name if there is one, else the number
+const scaleLabel = sc => sc === "" || sc == null ? "" : (scaleName(sc) === signed(+sc) ? signed(+sc) : `${signed(+sc)} ${scaleName(sc)}`);
+const GUIDE = {reached: 400, about: 160, for_whom: 160, avoid: 160, note: 600};   // soft limits: a note, not an essay
 
 // ---- meta, header -----------------------------------------------------------
 async function loadMeta(){
   if (!curator) { const m0 = await (await fetch("/api/meta")).json(); curator = m0.curator; localStorage.setItem("curator", curator); }
   META = await api("/api/meta");
-  $("#who").innerHTML = META.curators.map(c=>`<button data-c="${c.id}" class="${c.id===curator?"on":""}">${esc(c.name)}</button>`).join("");
+  document.body.dataset.curator = curator;
+  $("#who").innerHTML = META.curators.map(c=>`<button data-c="${c.id}" class="c-${c.id} ${c.id===curator?"on":""}" title="${esc(c.name)} · ${META.queues[c.id]||0} to write. drop a poster here">${esc(c.name)}<span class="q" title="in the to-write queue">${META.queues[c.id]||0} to write</span></button>`).join("");
   const keep = id => $("#"+id).value;
-  const g = keep("genre"), d = keep("decade"), ti = keep("tier"), ta = keep("tag"), la = keep("label");
+  const g = keep("genre"), d = keep("decade"), ti = keep("score"), ta = keep("tag"), la = keep("label"), fe = keep("feeling");
   $("#genre").innerHTML = `<option value="">all genres</option>` + META.genres.map(x=>`<option>${x}</option>`).join("");
   $("#label").innerHTML = `<option value="">all labels</option>` + META.labels.map(x=>`<option value="${esc(x.name)}">${esc(x.name)} (${x.n})</option>`).join("");
   $("#decade").innerHTML = `<option value="0">all decades</option>` + META.decades.map(x=>`<option value="${x}">${x}s</option>`).join("");
-  $("#tier").innerHTML = `<option value="">any tier</option>` + META.tiers.map(t=>`<option>${t.name}</option>`).join("");
+  $("#score").innerHTML = `<option value="">any score</option>` + META.scale.map(t=>`<option value="${t.score}">${esc(scaleLabel(t.score))}${t.n?` (${t.n})`:""}</option>`).join("");
+  $("#feeling").innerHTML = `<option value="">any end-feeling</option>` + META.feelings.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}${t.n?` (${t.n})`:""}</option>`).join("");
   $("#tag").innerHTML = `<option value="">any tag</option>` + META.tags.filter(t=>t.pos+t.neg).map(t=>`<option value="${esc(t.name)}">${esc(t.name)} (${t.pos+t.neg})</option>`).join("");
-  $("#genre").value = g; $("#decade").value = d; $("#tier").value = ti; $("#tag").value = ta; $("#label").value = la;
+  $("#genre").value = g; $("#decade").value = d; $("#score").value = ti; $("#tag").value = ta; $("#label").value = la; $("#feeling").value = fe;
   const l = $("#lst").value, L = await api("/api/lists"); LISTS = L.lists;
   $("#lst").innerHTML = `<option value="">any list</option>` + LISTS.map(x=>`<option value="${esc(x.list)}">${esc(x.list)} · seen ${x.by[curator]?.seen||0}/${x.total}</option>`).join("");
   $("#lst").value = l;
   const s = META.stats; state.pairs = s.pairs;
-  $("#stats").innerHTML = `<b>${s.seen}</b> seen · <b>${s.tiered}</b> tiered · <b>${s.noted}</b> noted · <b>${s.pairs}</b> compared · <b>${s.want}</b> want · ${s.total} total`;
+  $("#stats").innerHTML = `<b>${s.seen}</b> seen · <b>${s.tiered}</b> scored · <b>${s.felt}</b> felt · <b>${s.noted}</b> noted · <b>${s.pairs}</b> compared · <b>${s.want}</b> want · ${s.total} total`;
   $("#dlmenu").innerHTML = `<a href="/api/export.csv?curator=${curator}">CSV, ${esc(curName(curator))}'s marks</a><a href="/api/export.csv">CSV, everyone</a>
     <a href="/api/export.md?curator=${curator}" target="_blank">notes.md, ${esc(curName(curator))} (what the AI reads)</a><a href="/api/export.json">JSON, everything</a>`;
 }
 
 function params(){
   const p = new URLSearchParams();
-  for (const id of ["q","genre","label","decade","status","tier","tag","lst","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
+  for (const id of ["q","genre","label","decade","status","score","feeling","tag","lst","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
   if ($("#lib").checked) p.set("library", "1");
+  if ($("#queue").checked) p.set("queue", "me");
   p.set("offset", state.offset); p.set("limit", 60);
   return p;
 }
 
+let loadSeq = 0;
 async function load(reset=true){
   if (reset) { state.offset = 0; state.films = []; state.i = 0; }
+  const seq = ++loadSeq;
   const r = await api("/api/films?" + params());
+  if (seq !== loadSeq) return;   // a newer filter change already answered
   state.total = r.total; state.films = state.films.concat(r.films); state.offset += r.films.length;
   render();
 }
@@ -229,7 +265,8 @@ async function load(reset=true){
 // a film marked while the "unmarked" filter is on drops out of the server's list: keep offsets honest
 function marked(f){
   const st = $("#status").value;
-  const gone = (st === "unmarked" && f.status) || (st === "seen_nonote" && hasNote(f)) || (st === "seen_notier" && f.tier);
+  const gone = (st === "unmarked" && f.status) || (st === "seen_nonote" && hasNote(f)) || (st === "seen_notier" && f.score != null) || (st === "seen_nofeeling" && f.feelings)
+    || ($("#queue").checked && !(f.queued||"").split(",").includes(curator));
   if (!f._marked && gone) { f._marked = true; state.offset = Math.max(0, state.offset - 1); }
 }
 const hasNote = f => ["about","reached","for_whom","avoid","note"].some(k => (f[k]||"").trim());
@@ -257,10 +294,12 @@ const listsLine = f => f.lists ? `<div class="d" title="${esc(f.lists.replace(/\
 function card(f){
   const poster = f.poster ? `<img loading="lazy" src="${IMG}${f.poster}" alt="">` : `<span>${esc(f.title)}<br><small>${f.year}</small></span>`;
   const badge = f.status ? `<span class="badge ${f.status}">${f.status==="want"?"want":f.status==="not"?"not seen":"seen"}</span>` : "";
-  const tier = f.tier ? `<span class="tier" title="${esc(f.tier)}">${esc(f.tier)}</span>` : "";
+  const tier = f.score != null ? `<span class="tier" title="${esc(scaleLabel(f.score))}">${esc(scaleLabel(f.score))}</span>` : "";
   const oth = otherMarks(f);
-  const others = oth.length ? `<div class="others">${oth.map(([c,s,t])=>`<span title="${esc(curName(c))}: ${s}${t?", "+esc(t):""}">${esc(curName(c)[0])}: ${t ? esc(t) : s}</span>`).join("")}</div>` : "";
-  return `<div class="card" data-id="${f.tconst}">${badge}${tier}<div class="poster">${poster}${others}</div>
+  const others = oth.length ? `<div class="others">${oth.map(([c,s,sc])=>`<span class="c-${c}" title="${esc(curName(c))}: ${s}${sc!==""?", "+esc(scaleLabel(sc)):""}">${esc(curName(c)[0])}: ${sc !== "" ? esc(scaleLabel(sc)) : s}</span>`).join("")}</div>` : "";
+  const qs = (f.queued||"").split(",").filter(Boolean);
+  const qb = qs.length ? `<div class="qbadge">${qs.map(c=>`<span class="c-${c}" title="${esc(curName(c))} writes this">${esc(curName(c))} ✎</span>`).join("")}</div>` : "";
+  return `<div class="card" data-id="${f.tconst}" draggable="true">${badge}${tier}<div class="poster">${poster}${others}${qb}</div>
     <div class="cap"><div class="t">${esc(f.title)}</div>
     <div class="s">${f.year} · ★ ${f.rating}${f.rt!=null?` · 🍅 ${f.rt}`:""} · ${f.runtime||"?"} min${f.in_library?' · <span class="lib" title="in your library">●</span>':''}</div>
     <div class="d">${esc(f.directors||"")}</div>${f.labels?`<div class="d" style="color:var(--p)">${esc(f.labels.replace(/,/g," · "))}</div>`:""}${listsLine(f)}</div></div>`;
@@ -277,7 +316,7 @@ function listsBar(){
   const name = $("#lst").value; if (!name) return "";
   const L = LISTS.find(x=>x.list===name); if (!L) return "";
   return `<div class="lists-bar"><b>${esc(name)}</b> · ${L.total} films` + META.curators.map(c => { const b = L.by[c.id]||{};
-    return `<span><b>${esc(c.name)}</b>: ${b.seen||0} seen · ${b.tiered||0} tiered · ${b.noted||0} noted · ${b.want||0} want${b.avg_score!=null?` · avg ${b.avg_score}`:""}</span>`; }).join("") +
+    return `<span class="c-${c.id}"><b style="color:var(--who)">${esc(c.name)}</b>: ${b.seen||0} seen · ${b.tiered||0} scored · ${b.noted||0} noted · ${b.want||0} want · ${b.queued||0} to write${b.avg_score!=null?` · avg ${signed(b.avg_score)}`:""}</span>`; }).join("") +
     `<span style="margin-left:auto;color:var(--mute)">everyone's marks show on the cards</span></div>`;
 }
 
@@ -328,7 +367,7 @@ function renderOne(){
   }
   const poster = f.poster ? `<img src="${IMG}${f.poster}" alt="" style="width:100%;border-radius:8px">` : `<div class="poster"><span>${esc(f.title)}<br><small>${f.year}</small></span></div>`;
   const oth = otherMarks(f);
-  main.innerHTML = listsBar() + `<div class="count" style="justify-content:center">${state.i+1} / ${state.total}${f.status ? ` · already marked <b>${f.status}</b>` : ""}${oth.map(([c,s,t])=>` · <span style="color:var(--p)">${esc(curName(c))}: ${s}${t?", "+esc(t):""}</span>`).join("")}</div>
+  main.innerHTML = listsBar() + `<div class="count" style="justify-content:center">${state.i+1} / ${state.total}${f.status ? ` · already marked <b>${f.status}</b>` : ""}${oth.map(([c,s,sc])=>` · <span class="c-${c}" style="color:var(--who)">${esc(curName(c))}: ${s}${sc!==""?", "+esc(scaleLabel(sc)):""}</span>`).join("")}</div>
     <div class="one"><div>${poster}</div><div>
       <h2 style="margin:0 0 4px">${esc(f.title)} <span style="color:var(--mute);font-weight:400">(${f.year})</span></h2>
       <div class="meta">${esc(f.directors||"")}<br>${esc(f.genres)} · ${f.runtime||"?"} min · IMDb ★ ${f.rating} (${(f.votes/1000|0)}k)${f.in_library?' · <span class="lib">● in your library</span>':''}</div>
@@ -360,43 +399,58 @@ function next(){
 
 // ---- compare -----------------------------------------------------------------
 async function loadPair(){
-  const p = new URLSearchParams(); if (state.sameTier) p.set("same_tier", "1"); if (state.pairTier) p.set("tier", state.pairTier);
+  state.picked = null;
+  const p = new URLSearchParams(); if (state.sameTier) p.set("same_tier", "1"); if (state.pairScore !== "") p.set("score", state.pairScore);
   state.pair = await api("/api/pair?" + p); renderPair();
 }
 function renderPair(){
   const p = state.pair, main = $("#main");
-  const bar = `<div class="count" style="justify-content:center"><label class="chk"><input type="checkbox" id="sametier" ${state.sameTier?"checked":""}> same tier only</label>
-      <select id="pairtier"><option value="">any tier</option>${META.tiers.map(t=>`<option ${t.name===state.pairTier?"selected":""}>${t.name}</option>`).join("")}</select></div>`;
+  const bar = `<div class="count" style="justify-content:center"><label class="chk"><input type="checkbox" id="sametier" ${state.sameTier?"checked":""}> same score only</label>
+      <select id="pairscore"><option value="">any score</option>${META.scale.map(t=>`<option value="${t.score}" ${String(t.score)===String(state.pairScore)?"selected":""}>${esc(scaleLabel(t.score))}</option>`).join("")}</select></div>`;
   if (!p || !p.a) { main.innerHTML = bar + `<div class="center">${p ? esc(p.reason) : "…"}</div>`; wirePair(); return; }
-  const side = f => `${card(f)}<div class="center" style="margin:6px 0 0;font-size:12px">${f.tier ? esc(f.tier) : "no tier yet"}</div>`;
+  const side = f => `${card(f)}<div class="center" style="margin:6px 0 0;font-size:12px">${f.score != null ? esc(scaleLabel(f.score)) : "no score yet"}</div>`;
   main.innerHTML = bar + `<div class="center">which one did ${esc(curName(curator))} like more? <kbd>←</kbd> left · <kbd>→</kbd> right · <kbd>↓</kbd> can't say &nbsp;·&nbsp; <b>${state.pairs}</b> compared</div>
-    <div class="duel"><div data-pick="a">${side(p.a)}</div><div class="vs">vs</div><div data-pick="b">${side(p.b)}</div></div>`;
+    <div class="duel"><div data-pick="a">${side(p.a)}</div><div class="vs">vs</div><div data-pick="b">${side(p.b)}</div></div>
+    <div class="reason" id="reason" hidden><span id="reason-for" style="color:var(--mute);font-size:13px;white-space:nowrap"></span><input type="text" id="reason-in" placeholder="because… (one line, in your words; Enter to save, Esc to skip)"><button class="primary" id="reason-ok">save</button><button id="reason-skip">skip</button></div>`;
   wirePair();
 }
 function wirePair(){
   $("#sametier").onchange = e => { state.sameTier = e.target.checked; loadPair(); };
-  $("#pairtier").onchange = e => { state.pairTier = e.target.value; loadPair(); };
+  $("#pairscore").onchange = e => { state.pairScore = e.target.value; loadPair(); };
+  const inp = $("#reason-in"); if (!inp) return;
+  inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); sendPair(inp.value); } if (e.key === "Escape") { e.preventDefault(); sendPair(""); } };
+  $("#reason-ok").onclick = () => sendPair(inp.value); $("#reason-skip").onclick = () => sendPair("");
 }
-async function pick(which){
+// the winner is chosen first (keyboard), then one line of why; the pair is saved either way
+function pick(which){
   const p = state.pair; if (!p || !p.a) return;
-  const r = await api("/api/pair", {a: p.a.tconst, b: p.b.tconst, winner: which === "a" ? p.a.tconst : which === "b" ? p.b.tconst : null});
+  if (which === "skip") { state.picked = null; return sendPair(""); }
+  state.picked = which;
+  const w = which === "a" ? p.a : p.b, l = which === "a" ? p.b : p.a;
+  $("#reason").hidden = false; $("#reason-for").textContent = `${w.title} over ${l.title}, because…`;
+  $("#reason-in").focus();
+}
+async function sendPair(reason){
+  const p = state.pair; if (!p || !p.a) return;
+  const which = state.picked;
+  const r = await api("/api/pair", {a: p.a.tconst, b: p.b.tconst, winner: which === "a" ? p.a.tconst : which === "b" ? p.b.tconst : null, reason: (reason||"").trim() || null});
   state.pairs = r.pairs; loadPair();
 }
 
 // ---- ladder: order inside a tier -------------------------------------------
 async function loadLadder(){
-  if (!state.ladderTier) state.ladderTier = META.tiers[0].name;
-  state.ladder = await api("/api/ladder?tier=" + encodeURIComponent(state.ladderTier)); renderLadder();
+  if (state.ladderScore == null) { const used = META.scale.find(s=>s.n>0); state.ladderScore = used ? used.score : 10; }
+  state.ladder = await api("/api/ladder?score=" + state.ladderScore); renderLadder();
 }
 function renderLadder(){
   const L = state.ladder, main = $("#main");
-  const tiers = META.tiers.map(t=>`<option ${t.name===state.ladderTier?"selected":""}>${t.name}</option>`).join("");
-  main.innerHTML = `<div class="ladder"><div class="count"><select id="ladtier">${tiers}</select><span><b>${L.films.length}</b> films · ${L.films.filter(f=>f.rank).length} ordered</span>
+  const opts = META.scale.map(t=>`<option value="${t.score}" ${t.score===state.ladderScore?"selected":""}>${esc(scaleLabel(t.score))}${t.n?` (${t.n})`:""}</option>`).join("");
+  main.innerHTML = `<div class="ladder"><div class="count"><select id="ladscore">${opts}</select><span><b>${L.films.length}</b> films · ${L.films.filter(f=>f.rank).length} ordered</span>
       <span>drag to order, or <kbd>↑</kbd><kbd>↓</kbd> buttons · best at the top · click a title to write it up</span>
-      <button id="ladcompare" style="margin-left:auto">compare inside this tier →</button></div>
-    <div id="rungs">${L.films.map((f,i)=>rung(f,i)).join("") || `<div class="center">nothing in this tier yet for ${esc(curName(curator))}</div>`}</div></div>`;
-  $("#ladtier").onchange = e => { state.ladderTier = e.target.value; loadLadder(); };
-  $("#ladcompare").onclick = () => { state.sameTier = true; state.pairTier = state.ladderTier; setMode("compare"); };
+      <button id="ladcompare" style="margin-left:auto">compare at this score →</button></div>
+    <div id="rungs">${L.films.map((f,i)=>rung(f,i)).join("") || `<div class="center">nothing at ${esc(scaleLabel(state.ladderScore))} yet for ${esc(curName(curator))}</div>`}</div></div>`;
+  $("#ladscore").onchange = e => { state.ladderScore = +e.target.value; loadLadder(); };
+  $("#ladcompare").onclick = () => { state.sameTier = true; state.pairScore = String(state.ladderScore); setMode("compare"); };
   wireDrag();
 }
 function rung(f,i){
@@ -429,7 +483,7 @@ function wireDrag(){
 async function saveLadder(){
   const order = [...$("#rungs").querySelectorAll(".rung")].map(r=>r.dataset.id);
   $("#rungs").querySelectorAll(".rung .n").forEach((n,i)=>n.textContent = i+1);
-  await api("/api/ladder", {tier: state.ladderTier, order});
+  await api("/api/ladder", {score: state.ladderScore, order});
   state.ladder.films = order.map((id,i) => Object.assign(state.ladder.films.find(f=>f.tconst===id), {rank:i+1}));
   $("#rungs").querySelectorAll(".wr").forEach(w => w.textContent = w.textContent.replace(" · unordered",""));
 }
@@ -437,49 +491,64 @@ async function saveLadder(){
 // ---- progress ------------------------------------------------------------------
 async function loadProgress(){ state.prog = await api("/api/progress"); renderProgress(); }
 function renderProgress(){
-  const P = state.prog, main = $("#main"), tab = state.progTab;
-  const tabs = [["genre","by genre"],["decade","by decade"],["label","by label"],["list","by list"],["tier","tiers"]];
+  const P = state.prog, main = $("#main"), tab = state.progTab, cs = P.curators;
+  const tabs = [["genre","genres"],["decade","decades"],["label","labels"],["list","lists"],["score","scale"],["feeling","end-feelings"]];
+  const by = (row, k) => `<span class="by">${cs.map(c=>`<span class="c-${c.id}"><i>${esc(c.name[0])}</i>${row.by[c.id]?.[k] ?? 0}</span>`).join(" ")}</span>`;
+  const summary = `<div class="sum">${cs.map(c => { const x = P.summary[c.id]; return `<div class="box c-${c.id}"><h3>${esc(c.name)}</h3><div class="kv">
+      <span>seen</span><b>${x.seen}</b><span>scored</span><b>${x.tiered}</b><span>with an end-feeling</span><b>${x.felt}</b><span>with "why it reached me"</span><b>${x.reached}</b>
+      <span>with any note</span><b>${x.noted}</b><span>tagged</span><b>${x.tagged}</b><span>want to see</span><b>${x.want}</b><span>to write (queue)</span><b>${x.queued}</b><span>compared</span><b>${x.pairs}</b></div></div>`; }).join("")}</div>`;
   let body;
-  if (tab === "tier") {
-    body = `<table><tr><th>tier</th><th class="num">films</th><th class="num">ordered</th><th></th></tr>` + P.tier.map(r =>
-      `<tr class="link" data-ladder="${esc(r.key)}"><td>${esc(r.key)}</td><td class="num">${r.total}</td><td class="num">${r.ranked}</td><td><div class="bar"><i class="b2" style="width:${r.total?100*r.ranked/r.total:0}%"></i></div></td></tr>`).join("") + "</table>";
+  if (tab === "score") {
+    body = `<table><tr><th>score</th><th>name</th><th class="num">films</th><th class="num">ordered</th></tr>` + P.score.map(r =>
+      `<tr class="link" data-ladder="${r.key}"><td class="num">${signed(r.key)}</td><td>${esc(r.name === signed(r.key) ? "" : r.name)}</td><td class="num">${by(r,"n")}</td><td class="num">${by(r,"ranked")}</td></tr>`).join("") + "</table>";
+  } else if (tab === "feeling") {
+    body = `<table><tr><th>end-feeling</th><th>group</th><th class="num">films</th><th class="num">at 3/3</th></tr>` + P.feeling.map(r =>
+      `<tr class="link" data-f="feeling" data-key="${esc(r.key)}"><td>${esc(r.key)}${r.es?` <span style="color:var(--mute)">· ${esc(r.es)}</span>`:""}</td><td>${esc(r.grp||"")}</td><td class="num">${by(r,"n")}</td><td class="num">${by(r,"strong")}</td></tr>`).join("") + "</table>";
   } else {
     const rows = P[tab];
-    body = `<table><tr><th>${tab}</th><th class="num">films</th><th class="num">seen</th><th class="num">tiered</th><th class="num">noted</th><th class="num">want</th><th class="num">unmarked</th><th>seen · noted</th></tr>` +
-      rows.map(r => `<tr class="link" data-f="${tab}" data-key="${esc(r.key)}"><td>${esc(tab==="decade"? r.key+"s" : r.key)}</td><td class="num">${r.total}</td><td class="num">${r.seen}</td><td class="num">${r.tiered}</td><td class="num">${r.noted}</td><td class="num">${r.want}</td><td class="num">${r.unmarked}</td>
-        <td><div class="bar"><i class="b2" style="width:${100*r.noted/r.total}%"></i><i class="b1" style="width:${100*(r.seen-r.noted)/r.total}%"></i></div></td></tr>`).join("") + "</table>" +
+    body = `<table><tr><th>${tab}</th><th class="num">films</th><th class="num">seen</th><th class="num">scored</th><th class="num">felt</th><th class="num">noted</th><th class="num">to write</th><th class="num">unmarked</th></tr>` +
+      rows.map(r => `<tr class="link" data-f="${tab}" data-key="${esc(r.key)}"><td>${esc(tab==="decade"? r.key+"s" : r.key)}</td><td class="num">${r.total}</td>
+        <td class="num">${by(r,"seen")}</td><td class="num">${by(r,"tiered")}</td><td class="num">${by(r,"felt")}</td><td class="num">${by(r,"noted")}</td><td class="num">${by(r,"queued")}</td><td class="num">${by(r,"unmarked")}</td></tr>`).join("") + "</table>" +
       (rows.length ? "" : `<div class="center">nothing here yet</div>`);
   }
-  main.innerHTML = `<div class="count"><b>${esc(curName(curator))}</b>'s progress · click a row to browse it ·
-      <a href="#browse" data-quick="seen_nonote">seen but not noted (${META.stats.seen - META.stats.noted})</a> ·
-      <a href="#browse" data-quick="seen_notier">seen but not tiered (${META.stats.seen - META.stats.tiered})</a></div>
+  main.innerHTML = summary + `<div class="count">per person: ${cs.map(c=>`<span class="c-${c.id}" style="color:var(--who)"><b style="color:inherit">${esc(c.name[0])}</b> = ${esc(c.name)}</span>`).join(" · ")} · click a row to browse it as ${esc(curName(curator))} ·
+      <a href="#browse" data-quick="seen_nonote">seen, not noted (${META.stats.seen - META.stats.noted})</a> ·
+      <a href="#browse" data-quick="seen_notier">seen, not scored (${META.stats.seen - META.stats.tiered})</a> ·
+      <a href="#browse" data-quick="seen_nofeeling">seen, no end-feeling (${META.stats.seen - META.stats.felt})</a> ·
+      <a href="#browse" data-quick="queue">my queue (${META.stats.queue})</a></div>
     <div class="tabs">${tabs.map(([k,l])=>`<button data-tab="${k}" class="${k===tab?"on":""}">${l}</button>`).join("")}</div>${body}`;
   main.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { state.progTab = b.dataset.tab; renderProgress(); });
-  main.querySelectorAll("[data-quick]").forEach(a => a.onclick = e => { e.preventDefault(); clearFilters(); $("#status").value = a.dataset.quick; setMode("browse"); load(); });
+  main.querySelectorAll("[data-quick]").forEach(a => a.onclick = e => { e.preventDefault(); clearFilters(); if (a.dataset.quick === "queue") $("#queue").checked = true; else $("#status").value = a.dataset.quick; setMode("browse"); load(); });
   main.querySelectorAll("tr.link").forEach(tr => tr.onclick = () => {
-    if (tr.dataset.ladder) { state.ladderTier = tr.dataset.ladder; setMode("ladder"); return; }
+    if (tr.dataset.ladder) { state.ladderScore = +tr.dataset.ladder; setMode("ladder"); return; }
     clearFilters(); const f = tr.dataset.f, k = tr.dataset.key;
-    $("#"+({genre:"genre",decade:"decade",label:"label",list:"lst"}[f])).value = k;
+    $("#"+({genre:"genre",decade:"decade",label:"label",list:"lst",feeling:"feeling"}[f])).value = k;
     setMode("browse"); load();
   });
 }
-function clearFilters(){ for (const id of ["q","genre","label","status","tier","tag","lst"]) $("#"+id).value = ""; $("#decade").value = "0"; $("#lib").checked = false; }
+function clearFilters(){ for (const id of ["q","genre","label","status","score","feeling","tag","lst"]) $("#"+id).value = ""; $("#decade").value = "0"; $("#lib").checked = false; $("#queue").checked = false; }
 
 // ---- tags & labels manager ---------------------------------------------------
 function renderTags(){
   const main = $("#main");
-  const groups = kind => [...new Set((kind==="tag"?META.tags:META.labels).map(t=>t.grp))].sort();
-  const table = (kind, rows) => `<h3 style="margin:18px 0 8px">${kind==="tag" ? "tags — why it reached you" : "labels — your sub-genres, shared with everyone"} <span style="color:var(--mute);font-weight:400;font-size:13px">${rows.length}</span></h3>
+  const vocab = kind => kind==="tag"?META.tags:kind==="label"?META.labels:META.feelings;
+  const groups = kind => [...new Set(vocab(kind).map(t=>t.grp))].sort();
+  const titles = {tag: "tags — why it reached you (per person)", label: "labels — your sub-genres, a property of the film, shared", feeling: "end-feelings — what it left you with (per person, max two per film)"};
+  const scaleTable = `<h3 style="margin:18px 0 8px">the scale — +10 is the best, −10 the worst; name any step, films keep their number</h3>
+    <table class="mgr"><tr><th class="num">score</th><th>name</th><th class="num">${esc(curName(curator))}'s films</th></tr>` +
+    META.scale.map(t => `<tr><td class="num">${signed(t.score)}</td><td><input type="text" class="scale-in" data-score="${t.score}" value="${esc(t.name)}" placeholder="(no name, shows ${signed(t.score)})" style="width:220px"></td><td class="num">${t.n}</td></tr>`).join("") + "</table>";
+  const table = (kind, rows) => `<h3 style="margin:18px 0 8px">${titles[kind]} <span style="color:var(--mute);font-weight:400;font-size:13px">${rows.length}</span></h3>
     <div style="margin-bottom:8px"><input type="text" id="new-${kind}" placeholder="new ${kind}, Enter" style="min-width:220px"></div>
-    <table class="mgr"><tr><th>name</th><th>group</th>${kind==="tag"?`<th class="num">+</th><th class="num">−</th><th class="num">everyone</th>`:`<th class="num">films</th>`}<th></th></tr>` +
-    rows.map(t => `<tr data-kind="${kind}" data-name="${esc(t.name)}"><td class="nm"><span>${esc(t.name)}</span></td>
+    <table class="mgr"><tr><th>name</th><th>group</th>${kind==="tag"?`<th class="num">+</th><th class="num">−</th><th class="num">everyone</th>`:kind==="feeling"?`<th class="num">${esc(curName(curator))}</th><th class="num">everyone</th>`:`<th class="num">films</th>`}<th></th></tr>` +
+    rows.map(t => `<tr data-kind="${kind}" data-name="${esc(t.name)}"><td class="nm"><span>${esc(t.name)}${t.es?` <span style="color:var(--mute);font-size:12px">· ${esc(t.es)}</span>`:""}</span></td>
       <td><input type="text" class="grp-in" value="${esc(t.grp)}" list="grps-${kind}" style="width:120px"></td>
-      ${kind==="tag"?`<td class="num">${t.pos}</td><td class="num">${t.neg}</td><td class="num">${t.n}</td>`:`<td class="num">${t.n}</td>`}
-      <td class="act"><button data-a="rename">rename</button><button data-a="merge">merge into…</button><button data-a="browse">browse</button>${(kind==="tag"?t.n:t.n)?"":`<button data-a="delete">delete</button>`}</td></tr>`).join("") +
+      ${kind==="tag"?`<td class="num">${t.pos}</td><td class="num">${t.neg}</td><td class="num">${t.n}</td>`:kind==="feeling"?`<td class="num">${t.n}</td><td class="num">${t.n_all}</td>`:`<td class="num">${t.n}</td>`}
+      <td class="act"><button data-a="rename">rename</button><button data-a="merge">merge into…</button><button data-a="browse">browse</button>${(kind==="feeling"?t.n_all:t.n)?"":`<button data-a="delete">delete</button>`}</td></tr>`).join("") +
     `</table><datalist id="grps-${kind}">${groups(kind).map(g=>`<option value="${esc(g)}">`).join("")}</datalist>`;
-  main.innerHTML = `<div class="count">rename and merge rewrite every film that carries the ${"name"}; counts are ${esc(curName(curator))}'s unless the column says everyone. a tag with no uses can be deleted.</div>` +
-    table("tag", META.tags) + table("label", META.labels);
-  ["tag","label"].forEach(kind => $("#new-"+kind).onkeydown = async e => {
+  main.innerHTML = `<div class="count">the words everything is written in. rename and merge rewrite every film that carries the word; a word with no uses can be deleted.</div>` +
+    scaleTable + table("feeling", META.feelings) + table("tag", META.tags) + table("label", META.labels);
+  main.querySelectorAll(".scale-in").forEach(inp => inp.onchange = async () => { await api("/api/scale", {score: +inp.dataset.score, name: inp.value}); await loadMeta(); });
+  ["tag","label","feeling"].forEach(kind => $("#new-"+kind).onkeydown = async e => {
     if (e.key !== "Enter" || !e.target.value.trim()) return;
     await api("/api/"+kind, {name: e.target.value}); await loadMeta(); renderTags();
   });
@@ -488,7 +557,7 @@ function renderTags(){
   });
   main.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
     const tr = b.closest("tr"), kind = tr.dataset.kind, name = tr.dataset.name, act = b.dataset.a, cell = tr.querySelector(".nm");
-    if (act === "browse") { clearFilters(); $("#"+(kind==="tag"?"tag":"label")).value = name; setMode("browse"); load(); return; }
+    if (act === "browse") { clearFilters(); $("#"+(kind==="tag"?"tag":kind==="label"?"label":"feeling")).value = name; setMode("browse"); load(); return; }
     if (act === "delete") { try { await api(`/api/${kind}/${encodeURIComponent(name)}`, null, "DELETE"); } catch (e) { alertInline(cell, e.message); return; } await loadMeta(); renderTags(); return; }
     if (act === "rename") {
       cell.innerHTML = `<input type="text" value="${esc(name)}" style="width:180px"> <button class="primary">ok</button>`;
@@ -498,7 +567,7 @@ function renderTags(){
       cell.querySelector("button").onclick = go; inp.onkeydown = e => { if (e.key === "Enter") go(); if (e.key === "Escape") renderTags(); };
     }
     if (act === "merge") {
-      const all = (kind==="tag"?META.tags:META.labels).filter(t=>t.name!==name);
+      const all = vocab(kind).filter(t=>t.name!==name);
       cell.innerHTML = `${esc(name)} → <select>${all.map(t=>`<option>${esc(t.name)}</option>`).join("")}</select> <button class="primary">merge</button> <button>cancel</button>`;
       const [ok, cancel] = cell.querySelectorAll("button");
       ok.onclick = async () => { await api(`/api/${kind}/edit`, {name, to: cell.querySelector("select").value}); await loadMeta(); renderTags(); };
@@ -525,10 +594,15 @@ function openSheet(f, adv=false){
   const chip = t => `<span class="chip ${pos.has(t.name)?"on":neg.has(t.name)?"neg":""}" data-tag="${esc(t.name)}">${esc(t.name)}${t.pos?`<span class="c">${t.pos}</span>`:""}</span>`;
   const chips = Object.entries(groups).map(([g, ts]) => `<div class="grp">${esc(g)}</div>` + ts.map(chip).join("")).join("");
   const labelChips = META.labels.filter(l => labs.has(l.name) || l.n > 0).map(l => `<span class="chip lab ${labs.has(l.name)?"on":""}" data-label="${esc(l.name)}">${esc(l.name)}<span class="c">${l.n}</span></span>`).join("");
+  const feels = Object.fromEntries((f.feelings||"").split(",").filter(Boolean).map(x=>x.split(":")).map(([n,i])=>[n,+i||2]));
+  const fgroups = {}; META.feelings.forEach(t => (fgroups[t.grp] ||= []).push(t));
+  const feelChips = Object.entries(fgroups).map(([g, ts]) => `<div class="grp">${esc(g)}</div>` + ts.map(t =>
+    `<span class="chip feel ${feels[t.name]?"on i"+feels[t.name]:""}" data-feel="${esc(t.name)}" data-i="${feels[t.name]||0}" title="${esc(t.es||"")} · click: 2/3, again: 3/3, again: 1/3, again: off">${esc(t.name)}${feels[t.name]?`<span class="c">${feels[t.name]}/3</span>`:t.es?`<span class="es">${esc(t.es)}</span>`:""}</span>`).join("")).join("");
+  const scaleBtns = META.scale.map(t => `<button type="button" data-score="${t.score}" class="${t.score<0?"neg":""} ${f.score===t.score?"on":""}" title="${esc(scaleLabel(t.score))}">${signed(t.score)}<small>${esc(t.name||"")}</small></button>`).join("");
   const opts = (map, cur, blank) => `<option value="">${blank}</option>` + Object.entries(map).map(([k,v])=>`<option value="${k}" ${k===cur?"selected":""}>${v}</option>`).join("");
   const idx = state.films.indexOf(f);
   const oth = otherMarks(f);
-  const field = (k, label, hint, ph, big=false) => `<div class="field"><label>${label}<span>${hint}</span></label><textarea id="m-${k}" class="${big?"big":""}" placeholder="${esc(ph)}" rows="${big?6:2}">${esc(f[k]||"")}</textarea></div>`;
+  const field = (k, label, hint, ph, big=false) => `<div class="field"><label>${label}<span>${hint}</span></label><textarea id="m-${k}" class="${big?"big":""}" placeholder="${esc(ph)}" rows="${big?6:2}" data-guide="${GUIDE[k]}">${esc(f[k]||"")}</textarea><div class="guide" id="g-${k}"></div></div>`;
   $("#sheet").innerHTML = `<div class="cols">
     <div class="col">
       ${f.poster?`<img class="p" src="${IMG}${f.poster}">`:""}
@@ -538,17 +612,21 @@ function openSheet(f, adv=false){
       ${f.lists?`<div class="meta">${esc(f.lists.split("|").map(x=>x.replace("#"," #")).join(" · "))}</div>`:""}
       <div class="ovw">${esc(f.overview||"")}</div>
       <div class="meta" style="font-size:11px">${esc((f.keywords||"").split(",").slice(0,12).join(" · "))}</div>
-      ${oth.length?`<div class="marks-others">${oth.map(([c,s,t])=>`<b>${esc(curName(c))}</b>: ${s}${t?", "+esc(t):""}`).join("<br>")}</div>`:""}
-      <div class="row"><label>status — ${esc(curName(curator))}</label>
+      ${oth.length?`<div class="marks-others">${oth.map(([c,s,sc])=>`<span class="c-${c}"><b style="color:var(--who)">${esc(curName(c))}</b>: ${s}${sc!==""?", "+esc(scaleLabel(sc)):""}</span>`).join("<br>")}</div>`:""}
+      ${(f.queued||"").split(",").filter(Boolean).map(c=>`<div class="marks-others c-${c}" style="color:var(--who)">✎ in ${esc(curName(c))}'s to-write queue</div>`).join("")}
+      <div class="row"><label>status — <span style="color:var(--who)">${esc(curName(curator))}</span></label>
         <div class="seg">
           <button class="seen ${f.status==="seen"?"on":""}" data-s="seen">seen</button>
           <button class="want ${f.status==="want"?"on":""}" data-s="want">want</button>
           <button class="not ${f.status==="not"?"on":""}" data-s="not">not seen</button>
         </div></div>
       <div class="seenonly" style="${f.status==="seen"?"":"display:none"}">
-        <div class="row"><label>tier <small>· keys 1–9, 0, -, = when not typing</small></label>
-          <select id="m-tier"><option value="">— pick —</option>${META.tiers.map((t,i)=>`<option ${t.name===f.tier?"selected":""}>${t.name}</option>`).join("")}</select>
+        <div class="row"><label>score <small>· +10 best, −10 worst · keys <kbd>=</kbd> up <kbd>-</kbd> down when not typing</small></label>
+          <div class="scale" id="m-scale">${scaleBtns}</div>
+          <div class="scale-name" id="m-scalename" ${f.score==null?"hidden":""}><span>${f.score!=null?signed(f.score):""} =</span><input type="text" id="m-scaleinput" placeholder="name this step (optional)" value="${f.score!=null?esc(scaleName(f.score)===signed(f.score)?"":scaleName(f.score)):""}"></div>
           ${f.rank?`<div class="meta" style="margin-top:4px">#${f.rank} in its ladder</div>`:""}</div>
+        <div class="row"><label>end-feeling <small>· what it left you with when it ended · two at most</small></label>
+          <div class="chips" id="feelchips">${feelChips}</div></div>
         <div class="row"><label>how it sits with you</label><div class="small" style="flex-direction:column">
           <select id="m-times">${opts(TIMES, f.times, "seen how often?")}</select>
           <select id="m-when">${opts(WHEN, f.when_seen, "when?")}</select>
@@ -593,6 +671,18 @@ function openSheet(f, adv=false){
     touch();
   });
   $("#chips").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; cycle(c); touch(); };
+  $("#m-scale").onclick = e => { const b = e.target.closest("[data-score]"); if (!b) return; setScore(b.classList.contains("on") ? null : +b.dataset.score); touch(); };
+  $("#m-scaleinput").onchange = async e => { const sc = currentScore(); if (sc == null) return; await api("/api/scale", {score: sc, name: e.target.value}); await loadMeta();
+    $("#m-scale").querySelector(`[data-score="${sc}"] small`).textContent = e.target.value.trim(); };
+  $("#feelchips").onclick = e => { const c = e.target.closest(".chip"); if (!c) return;
+    const i = +c.dataset.i, next = i === 0 ? 2 : i === 2 ? 3 : i === 3 ? 1 : 0;
+    if (next && !i && $("#feelchips").querySelectorAll(".chip.on").length >= 2) { flash(c, "two at most: turn one off first"); return; }
+    c.dataset.i = next; c.className = "chip feel" + (next ? " on i"+next : "");
+    const t = META.feelings.find(x=>x.name===c.dataset.feel) || {};
+    c.innerHTML = esc(c.dataset.feel) + (next ? `<span class="c">${next}/3</span>` : t.es ? `<span class="es">${esc(t.es)}</span>` : "");
+    touch(); };
+  sh.querySelectorAll("textarea[data-guide]").forEach(t => { const g = () => { const n = t.value.trim().length, lim = +t.dataset.guide, el = $("#g-"+t.id.slice(2));
+    el.textContent = n ? (n > lim ? `${n} chars · long for a note, is some of this plot?` : `${n} / ~${lim}`) : ""; el.className = "guide" + (n > lim ? " over" : ""); }; t.addEventListener("input", g); g(); });
   $("#sug").onclick = e => { const c = e.target.closest(".chip"); if (!c) return;
     const real = $("#chips").querySelector(`[data-tag="${CSS.escape(c.dataset.tag)}"]`);
     if (real) { if (!real.classList.contains("on")) { real.classList.remove("neg"); real.classList.add("on"); } }
@@ -625,6 +715,14 @@ function openSheet(f, adv=false){
   if (f.status === "seen" || adv) loadSuggestions(f);
 }
 
+function currentScore(){ const b = $("#m-scale")?.querySelector(".on"); return b ? +b.dataset.score : null; }
+function setScore(sc){
+  $("#m-scale").querySelectorAll("button").forEach(b => b.classList.toggle("on", sc != null && +b.dataset.score === sc));
+  const nm = $("#m-scalename"); nm.hidden = sc == null;
+  if (sc != null) { nm.querySelector("span").textContent = signed(sc) + " ="; const n = scaleName(sc); $("#m-scaleinput").value = n === signed(sc) ? "" : n; }
+}
+function flash(el, msg){ const t = el.title; el.title = msg; el.style.outline = "2px solid var(--neg)"; setTimeout(() => { el.style.outline = ""; el.title = t; }, 1200); }
+
 function cycle(c){
   if (c.classList.contains("on")) { c.classList.remove("on"); c.classList.add("neg"); }
   else if (c.classList.contains("neg")) c.classList.remove("neg");
@@ -650,7 +748,8 @@ function body(){
   const status = on ? on.dataset.s : null, seen = status === "seen";
   const v = id => (sh.querySelector("#m-"+id)?.value || "").trim() || null;
   return { tconst: f.tconst, status,
-    tier: seen ? v("tier") : null,
+    score: seen ? currentScore() : null,
+    feelings: seen ? [...sh.querySelectorAll("#feelchips .chip.on")].map(c=>`${c.dataset.feel}:${c.dataset.i}`) : [],
     tags: seen ? [...sh.querySelectorAll("#chips .chip.on")].map(c=>c.dataset.tag).concat([...sh.querySelectorAll("#chips .chip.neg")].map(c=>"-"+c.dataset.tag)) : [],
     labels: [...sh.querySelectorAll("#labelchips .chip.on")].map(c=>c.dataset.label),
     about: seen ? v("about") : null, reached: seen ? v("reached") : null, for_whom: seen ? v("for_whom") : null, avoid: seen ? v("avoid") : null,
@@ -719,16 +818,34 @@ document.onkeydown = e => {
     if ((e.ctrlKey || e.metaKey) && e.key === "ArrowLeft") { e.preventDefault(); step(-1); return; }
     if (!typing || tag === "SELECT") {
       if (e.key === "/") { e.preventDefault(); $("#newtag")?.focus(); return; }
-      const ti = "1234567890-=".indexOf(e.key);
-      if (ti >= 0 && META.tiers[ti] && $("#m-tier") && $("#sheet").querySelector(".seg button.on")?.dataset.s === "seen") { e.preventDefault(); $("#m-tier").value = META.tiers[ti].name; touch(); }
+      if ((e.key === "=" || e.key === "+" || e.key === "-") && $("#m-scale") && $("#sheet").querySelector(".seg button.on")?.dataset.s === "seen" && e.target.id !== "m-scaleinput") {
+        e.preventDefault(); const cur = currentScore(), d = e.key === "-" ? -1 : 1;
+        setScore(cur == null ? (d > 0 ? 6 : 0) : Math.max(-10, Math.min(10, cur + d))); touch(); }
     }
     return;
   }
   if (typing) return;
   if (state.mode === "triage") { const k = {s:"s",S:"s",w:"w",W:"w",n:"n",N:"n",ArrowRight:"skip",ArrowLeft:"back"}[e.key]; if (k) { e.preventDefault(); triage(k); } }
-  if (state.mode === "compare") { const k = {ArrowLeft:"a",ArrowRight:"b",ArrowDown:"skip"}[e.key]; if (k) { e.preventDefault(); pick(k); } }
+  if (state.mode === "compare" && !state.picked) { const k = {ArrowLeft:"a",ArrowRight:"b",ArrowDown:"skip"}[e.key]; if (k) { e.preventDefault(); pick(k); } }
 };
-["genre","label","decade","status","tier","tag","lst","sort","lib"].forEach(id => $("#"+id).onchange = () => state.mode === "foryou" ? loadForYou() : load());
+["genre","label","decade","status","score","feeling","tag","lst","sort","lib","queue"].forEach(id => $("#"+id).onchange = () => state.mode === "foryou" ? loadForYou() : load());
+
+// ---- drag a poster onto a name: that person writes it ----------------------
+let dragId = null;
+$("#main").addEventListener("dragstart", e => { const c = e.target.closest(".card"); if (!c) return; dragId = c.dataset.id; c.classList.add("dragging"); e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", dragId); });
+$("#main").addEventListener("dragend", e => { const c = e.target.closest(".card"); if (c) c.classList.remove("dragging"); dragId = null; $("#who").querySelectorAll(".drop").forEach(b=>b.classList.remove("drop")); });
+$("#who").addEventListener("dragover", e => { const b = e.target.closest("[data-c]"); if (!b || !dragId) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; b.classList.add("drop"); });
+$("#who").addEventListener("dragleave", e => { const b = e.target.closest("[data-c]"); if (b) b.classList.remove("drop"); });
+$("#who").addEventListener("drop", async e => {
+  const b = e.target.closest("[data-c]"); const id = dragId || e.dataTransfer.getData("text/plain"); if (!b || !id) return;
+  e.preventDefault(); b.classList.remove("drop");
+  const f = state.films.find(x=>x.tconst===id);
+  const already = f && (f.queued||"").split(",").includes(b.dataset.c);
+  const r = await api("/api/queue", {curator: b.dataset.c, tconst: id, on: !already});
+  if (f) { f.queued = r.queued.join(",") || null; }
+  META.queues = r.queues; $("#who").querySelectorAll("[data-c]").forEach(x => x.querySelector(".q").textContent = `${r.queues[x.dataset.c]||0} to write`);
+  if (!$("#queue").checked || b.dataset.c !== curator) render(); else load();
+});
 let deb; $("#q").oninput = () => { clearTimeout(deb); deb = setTimeout(()=>load(), 250); };
 window.onbeforeunload = () => dirty ? "unsaved" : undefined;
 

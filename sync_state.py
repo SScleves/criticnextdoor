@@ -19,7 +19,8 @@ from setup import migrate
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = os.environ.get("FILMCAT_STATE_DIR", os.path.join(HERE, "state"))
 REPO = os.environ.get("FILMCAT_STATE_REPO", "git@github.com:SScleves/criticnextdoor-state.git")
-MARK_COLS = ["curator", "tconst", "status", "tier", "rank", "times", "when_seen", "memory", "about", "reached", "for_whom", "avoid", "note", "source", "updated"]
+MARK_COLS = ["curator", "tconst", "status", "score", "tier", "rank", "times", "when_seen", "memory", "about", "reached", "for_whom", "avoid", "note", "source", "updated"]
+STATE_V = 2   # v2 adds marks.score, marks.feelings, pairs.reason, queue, scale, feelings
 now = lambda: time.strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -33,14 +34,18 @@ def collect(con):
     for r in con.execute(f"SELECT {','.join(MARK_COLS)} FROM marks"):
         d = dict(zip(MARK_COLS, r))
         d["tags"] = [("-" if p < 0 else "") + t for t, p in con.execute("SELECT tag, polarity FROM mark_tags WHERE curator=? AND tconst=?", (d["curator"], d["tconst"]))]
+        d["feelings"] = [f"{f}:{i}" for f, i in con.execute("SELECT feeling, intensity FROM mark_feelings WHERE curator=? AND tconst=?", (d["curator"], d["tconst"]))]
         marks.append(d)
     fl = {}
     for t, labels in con.execute("SELECT tconst, group_concat(label, ',') FROM film_labels GROUP BY tconst"):
         fl[t] = {"labels": labels.split(","), "at": ""}
-    return {"v": 1, "ts": now(), "marks": marks, "film_labels": fl,
+    return {"v": STATE_V, "ts": now(), "marks": marks, "film_labels": fl,
             "tags": [dict(zip(("name", "grp"), r)) for r in con.execute("SELECT name, grp FROM tags")],
             "labels": [dict(zip(("name", "grp"), r)) for r in con.execute("SELECT name, grp FROM labels")],
-            "pairs": [dict(zip(("ts", "a", "b", "winner", "skipped", "curator"), r)) for r in con.execute("SELECT ts,a,b,winner,skipped,curator FROM pairs")],
+            "feelings": [dict(zip(("name", "grp", "es"), r)) for r in con.execute("SELECT name, grp, es FROM feelings")],
+            "scale": [dict(zip(("score", "name"), r)) for r in con.execute("SELECT score, name FROM scale")],
+            "queue": [dict(zip(("curator", "tconst", "added"), r)) for r in con.execute("SELECT curator, tconst, added FROM queue")],
+            "pairs": [dict(zip(("ts", "a", "b", "winner", "skipped", "curator", "reason"), r)) for r in con.execute("SELECT ts,a,b,winner,skipped,curator,reason FROM pairs")],
             "events": [dict(zip(("ts", "kind", "tconst", "payload", "source", "curator"), r)) for r in con.execute("SELECT ts,kind,tconst,payload,source,curator FROM events")],
             "added": [dict(zip(("tconst", "added"), r)) for r in con.execute("SELECT tconst, added FROM films WHERE added IS NOT NULL AND added<>'filter'")]}
 
@@ -61,9 +66,12 @@ def merge(a, b):
         for r in rows:
             out[key(r)] = r
         return list(out.values())
-    return {"v": 1, "ts": now(), "marks": list(marks.values()), "film_labels": fl,
+    return {"v": STATE_V, "ts": now(), "marks": list(marks.values()), "film_labels": fl,
             "tags": uniq(a.get("tags", []) + b.get("tags", []), lambda t: t["name"]),
             "labels": uniq(a.get("labels", []) + b.get("labels", []), lambda t: t["name"]),
+            "feelings": uniq(a.get("feelings", []) + b.get("feelings", []), lambda t: t["name"]),
+            "scale": uniq(a.get("scale", []) + b.get("scale", []), lambda t: t["score"]),   # b (this machine) wins a name
+            "queue": uniq(a.get("queue", []) + b.get("queue", []), lambda x: (x["curator"], x["tconst"])),
             "pairs": uniq(a.get("pairs", []) + b.get("pairs", []), lambda p: (p.get("curator"), p["a"], p["b"], p["ts"])),
             "events": uniq(a.get("events", []) + b.get("events", []), lambda e: (e["ts"], e["kind"], e.get("tconst"), e.get("curator"), e.get("payload"))),
             "added": uniq(a.get("added", []) + b.get("added", []), lambda x: x["tconst"])}
@@ -72,24 +80,39 @@ def merge(a, b):
 def apply(con, s):
     for x in s.get("added", []):
         add_from_pool(con, x["tconst"], x.get("added") or "pool")
-    for t in ("marks", "mark_tags", "film_labels", "pairs", "events"):
+    for t in ("marks", "mark_tags", "mark_feelings", "film_labels", "pairs", "events", "queue"):
         con.execute(f"DELETE FROM {t}")
     for t in s.get("tags", []):
         con.execute("INSERT OR IGNORE INTO tags VALUES (?,?)", (t["name"], t.get("grp") or "custom"))
     for l in s.get("labels", []):
         con.execute("INSERT OR IGNORE INTO labels VALUES (?,?)", (l["name"], l.get("grp") or "custom"))
+    for f in s.get("feelings", []):
+        con.execute("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", (f["name"], f.get("grp") or "custom", f.get("es") or ""))
+    for x in s.get("scale", []):
+        con.execute("INSERT INTO scale VALUES (?,?) ON CONFLICT(score) DO UPDATE SET name=excluded.name", (x["score"], x.get("name") or ""))
+    for x in s.get("queue", []):
+        con.execute("INSERT OR IGNORE INTO queue (curator,tconst,added) VALUES (?,?,?)", (x["curator"], x["tconst"], x.get("added") or now()))
+    by_name = {r[0]: r[1] for r in con.execute("SELECT name, score FROM scale WHERE name<>''")}
     for m in s.get("marks", []):
+        m = dict(m)
+        if m.get("score") is None and m.get("tier"):   # a v1 mark: tier name -> score
+            m["score"] = by_name.get(m["tier"])
+        m["tier"] = None
         con.execute(f"INSERT OR IGNORE INTO marks ({','.join(MARK_COLS)}) VALUES ({','.join('?' * len(MARK_COLS))})", [m.get(c) for c in MARK_COLS])
         for t in m.get("tags", []):
             neg, name = t.startswith("-"), t.lstrip("-")
             con.execute("INSERT OR IGNORE INTO tags VALUES (?,?)", (name, "custom"))
             con.execute("INSERT OR IGNORE INTO mark_tags VALUES (?,?,?,?)", (m["curator"], m["tconst"], name, -1 if neg else 1))
+        for fe in m.get("feelings", []):
+            name, _, inten = fe.partition(":")
+            con.execute("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", (name, "custom", ""))
+            con.execute("INSERT OR IGNORE INTO mark_feelings VALUES (?,?,?,?)", (m["curator"], m["tconst"], name, int(inten or 2)))
     for t, v in s.get("film_labels", {}).items():
         for l in v.get("labels", []):
             con.execute("INSERT OR IGNORE INTO labels VALUES (?,?)", (l, "custom"))
             con.execute("INSERT OR IGNORE INTO film_labels VALUES (?,?)", (t, l))
     for p in s.get("pairs", []):
-        con.execute("INSERT INTO pairs (ts,a,b,winner,skipped,curator) VALUES (?,?,?,?,?,?)", (p["ts"], p["a"], p["b"], p.get("winner"), p.get("skipped", 0), p.get("curator")))
+        con.execute("INSERT INTO pairs (ts,a,b,winner,skipped,curator,reason) VALUES (?,?,?,?,?,?,?)", (p["ts"], p["a"], p["b"], p.get("winner"), p.get("skipped", 0), p.get("curator"), p.get("reason")))
     for e in s.get("events", []):
         con.execute("INSERT INTO events (ts,kind,tconst,payload,source,curator) VALUES (?,?,?,?,?,?)", (e["ts"], e["kind"], e.get("tconst"), e.get("payload"), e.get("source"), e.get("curator")))
     con.commit()

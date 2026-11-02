@@ -23,7 +23,7 @@ def main():
     shutil.copy(os.path.join(HERE, "films.db"), tmp)
     con = sqlite3.connect(tmp)
     migrate(con)
-    for t in ("marks", "mark_tags", "film_labels", "labels", "pairs", "events"):
+    for t in ("marks", "mark_tags", "mark_feelings", "film_labels", "labels", "pairs", "events", "queue"):
         con.execute(f"DELETE FROM {t}")
     con.execute("DELETE FROM tags WHERE name NOT IN (%s)" % ",".join("?" * len(TAGS)), [t[0] for t in TAGS])
     for t in [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'my%'")]:

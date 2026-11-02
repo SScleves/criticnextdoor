@@ -15,7 +15,7 @@ Usage:
     python setup.py
     python setup.py --min-votes 50000 --min-rating 6.5
 """
-import argparse, csv, gzip, os, sqlite3, urllib.request
+import argparse, csv, gzip, json, os, sqlite3, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = "https://datasets.imdbws.com/"
@@ -38,18 +38,6 @@ CREATE TABLE IF NOT EXISTS pool (
   title TEXT, original_title TEXT, year INTEGER, runtime INTEGER, genres TEXT,
   rating REAL, votes INTEGER, directors TEXT, writers TEXT
 );
-CREATE TABLE IF NOT EXISTS my (          -- current state, one row per film
-  tconst TEXT PRIMARY KEY REFERENCES films(tconst),
-  status TEXT,          -- seen | not | want
-  tier TEXT,            -- see tiers table
-  tags TEXT,            -- comma-separated; "-tag" means "this is what went wrong"
-  note TEXT,            -- your words
-  times TEXT,           -- once | few | many
-  when_seen TEXT,       -- recent | years | kid
-  memory TEXT,          -- clear | fuzzy
-  source TEXT,          -- me | tautulli
-  updated TEXT DEFAULT (datetime('now'))
-);
 CREATE TABLE IF NOT EXISTS events (      -- append-only: every change, forever
   id INTEGER PRIMARY KEY,
   ts TEXT DEFAULT (datetime('now')),
@@ -71,7 +59,43 @@ CREATE TABLE IF NOT EXISTS lists (       -- external top lists: IMDb Top 250, TS
 );
 CREATE INDEX IF NOT EXISTS idx_lists_tconst ON lists(tconst);
 CREATE TABLE IF NOT EXISTS tiers (name TEXT PRIMARY KEY, score INTEGER, ord INTEGER);
-CREATE TABLE IF NOT EXISTS tags (name TEXT PRIMARY KEY, grp TEXT);
+CREATE TABLE IF NOT EXISTS tags (name TEXT PRIMARY KEY, grp TEXT);   -- "why it reached you": per curator, per film
+CREATE TABLE IF NOT EXISTS curators (id TEXT PRIMARY KEY, name TEXT, ord INTEGER);
+CREATE TABLE IF NOT EXISTS marks (       -- current state, one row per (curator, film). replaces `my`
+  curator TEXT, tconst TEXT REFERENCES films(tconst),
+  status TEXT,          -- seen | not | want
+  tier TEXT,            -- see tiers table
+  rank INTEGER,         -- order inside the tier (1 = best); NULL = not ordered yet
+  times TEXT,           -- once | few | many
+  when_seen TEXT,       -- recent | years | kid
+  memory TEXT,          -- clear | fuzzy
+  about TEXT,           -- what it's about, in your words (not the plot: the thing)
+  reached TEXT,         -- why it reached you: feeling and mechanism. THE field the recommender reads
+  for_whom TEXT,        -- who it's for
+  avoid TEXT,           -- who should avoid it
+  note TEXT,            -- anything else
+  source TEXT,          -- me | tautulli | restore
+  updated TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (curator, tconst)
+);
+CREATE TABLE IF NOT EXISTS mark_tags (   -- one row per tag on a mark; polarity 1 = why it worked, -1 = what went wrong
+  curator TEXT, tconst TEXT, tag TEXT, polarity INTEGER DEFAULT 1,
+  PRIMARY KEY (curator, tconst, tag)
+);
+CREATE TABLE IF NOT EXISTS labels (name TEXT PRIMARY KEY, grp TEXT);  -- your sub-genres: a property of the film, shared
+CREATE TABLE IF NOT EXISTS film_labels (tconst TEXT, label TEXT, PRIMARY KEY (tconst, label));
+CREATE INDEX IF NOT EXISTS idx_marks_tconst ON marks(tconst);
+CREATE TABLE IF NOT EXISTS feelings (name TEXT PRIMARY KEY, grp TEXT, es TEXT);  -- what the film leaves in you at the end
+CREATE TABLE IF NOT EXISTS mark_feelings (   -- at most two per mark, intensity 1..3
+  curator TEXT, tconst TEXT, feeling TEXT, intensity INTEGER DEFAULT 2,
+  PRIMARY KEY (curator, tconst, feeling)
+);
+CREATE TABLE IF NOT EXISTS scale (score INTEGER PRIMARY KEY, name TEXT);   -- -10..10, names are yours to edit
+CREATE TABLE IF NOT EXISTS queue (        -- "X writes this": who should sit down with the film. a to-do, not an opinion
+  curator TEXT, tconst TEXT, added TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (curator, tconst)
+);
+CREATE INDEX IF NOT EXISTS idx_mark_tags_tag ON mark_tags(tag);
 CREATE INDEX IF NOT EXISTS idx_films_decade ON films(decade);
 CREATE INDEX IF NOT EXISTS idx_films_rating ON films(rating);
 CREATE INDEX IF NOT EXISTS idx_pool_title ON pool(title);
@@ -82,10 +106,25 @@ CREATE INDEX IF NOT EXISTS idx_events_tconst ON events(tconst);
 MIGRATIONS = {
     "films": ["directors TEXT", "writers TEXT", "in_library INTEGER DEFAULT 0", "added TEXT",
               "rt INTEGER", "metacritic INTEGER", "omdb_checked INTEGER DEFAULT 0"],
-    "my": ["times TEXT", "when_seen TEXT", "memory TEXT", "source TEXT"],
+    "pairs": ["curator TEXT", "reason TEXT"],
+    "marks": ["score INTEGER"],
+    "events": ["curator TEXT"],
 }
 
-TIERS = [  # (name, score, order)  score feeds the recommender, name is what you see
+FEELINGS = [  # (name, group, spanish). The visitor's first question is "what did you feel at the end?": same words here.
+    ("wrecked", "hit hard", "destrozado"), ("unsettled", "hit hard", "inquieto"), ("hollow", "hit hard", "vacío"),
+    ("shaken", "hit hard", "sacudido"),
+    ("warm", "hit warm", "reconfortado"), ("giddy", "hit warm", "eufórico"), ("cosy", "hit warm", "acogedor"),
+    ("moved", "hit warm", "conmovido"),
+    ("wired", "head", "con la cabeza a mil"), ("satisfied", "head", "redondo"), ("puzzled", "head", "descolocado"),
+    ("cheated", "let down", "estafado"), ("numb", "let down", "indiferente"), ("annoyed", "let down", "irritado"),
+    ("delighted-by-the-mess", "fun-bad", "encantado con el desastre"),
+]
+
+CURATORS = [("santi", "Santi", 1), ("paola", "Paola", 2)]
+DEFAULT_CURATOR = "santi"
+
+TIERS = [  # (name, score, order): the original tier names. They seed the -10..10 scale; the scale is what the app uses now.
     ("my favourite", 10, 1), ("top tier", 9, 2), ("excellent", 8, 3),
     ("very good", 7, 4), ("good", 6, 5), ("ok", 4, 6),
     ("meh", 1, 7),
@@ -119,7 +158,49 @@ def migrate(con):
                 con.execute(f"ALTER TABLE {table} ADD COLUMN {c}")
     con.executemany("INSERT OR IGNORE INTO tiers VALUES (?,?,?)", TIERS)
     con.executemany("INSERT OR IGNORE INTO tags VALUES (?,?)", TAGS)
+    con.executemany("INSERT OR IGNORE INTO curators VALUES (?,?,?)", CURATORS)
+    con.executemany("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", FEELINGS)
+    names = {score: name for name, score, _ in TIERS}
+    con.executemany("INSERT OR IGNORE INTO scale VALUES (?,?)", [(sc, names.get(sc, "")) for sc in range(10, -11, -1)])
+    # marks written before the scale: score from the tier name
+    con.execute("UPDATE marks SET score=(SELECT t.score FROM tiers t WHERE t.name=marks.tier) WHERE score IS NULL AND tier IS NOT NULL")
+    migrate_to_curators(con)
     con.commit()
+
+
+def migrate_to_curators(con):
+    """
+    One-time: the old single-curator `my` table (comma-separated tags) becomes rows in `marks` +
+    `mark_tags` for DEFAULT_CURATOR, and pairs/events without an owner get one. `my` is kept,
+    renamed to `my_legacy`, so nothing is lost. Runs only when `my` still exists.
+    """
+    tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "my" not in tables:
+        return
+    if "my_legacy" in tables:   # already migrated once; a stray empty `my` is just dropped
+        if con.execute("SELECT COUNT(*) FROM my").fetchone()[0] == 0:
+            con.execute("DROP TABLE my"); return
+        con.execute("ALTER TABLE my_legacy RENAME TO my_legacy_" + time.strftime("%Y%m%d%H%M%S"))
+    n = 0
+    cols = [c[1] for c in con.execute("PRAGMA table_info(my)")]
+    for row in con.execute("SELECT * FROM my").fetchall():
+        r = dict(zip(cols, tuple(row)))
+        con.execute("""INSERT OR IGNORE INTO marks (curator,tconst,status,tier,times,when_seen,memory,note,source,updated)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    (DEFAULT_CURATOR, r["tconst"], r.get("status"), r.get("tier"), r.get("times"),
+                     r.get("when_seen"), r.get("memory"), r.get("note"), r.get("source"), r.get("updated")))
+        for t in (r.get("tags") or "").split(","):
+            if not t:
+                continue
+            pol, name = (-1, t[1:]) if t.startswith("-") else (1, t)
+            con.execute("INSERT OR IGNORE INTO mark_tags VALUES (?,?,?,?)", (DEFAULT_CURATOR, r["tconst"], name, pol))
+        n += 1
+    con.execute("UPDATE pairs SET curator=? WHERE curator IS NULL", (DEFAULT_CURATOR,))
+    con.execute("UPDATE events SET curator=? WHERE curator IS NULL", (DEFAULT_CURATOR,))
+    con.execute("ALTER TABLE my RENAME TO my_legacy")
+    con.execute("INSERT INTO events (kind,tconst,payload,source,curator) VALUES ('migrate','',?,'setup',?)",
+                (json.dumps({"from": "my", "rows": n}), DEFAULT_CURATOR))
+    print(f"migrated {n} marks from `my` to `marks` for {DEFAULT_CURATOR} (old table kept as my_legacy)")
 
 
 def download(name, dest_dir):

@@ -1,11 +1,15 @@
-# filmcat — your taste, in your words, as training data
+# Critic Next Door, phase 1: the catalogue
 
-**Open it:** https://sscleves.github.io/criticnextdoor/ (front door: picks home wifi or meshnet). The app itself runs on the media server at `http://192.168.1.8:8000`.
+**Open it anywhere:** https://sscleves.github.io/criticnextdoor/ — the full app, running in the
+browser (see *Online edition*). On the home network the local server is faster and has posters
+when enriched: `http://192.168.1.8:8000`, or the door at https://sscleves.github.io/criticnextdoor/local.html.
 
-Browse ~6,600 films that matter (IMDb's data), mark what you've seen, give each a
-tier, tags (+ why it worked / − what went wrong), a note in your own words, and
-answer "which did you like more?" pairs. Everything you type is versioned and
-exported as jsonl: that's the input for the recommender you'll build on it.
+Your taste, in your words, as training data. Browse ~6,600 films that matter (IMDb's
+data), mark what you've seen, give each a tier, order the films inside a tier, tag it
+(+ why it worked / − what went wrong), label it with your own sub-genres, write it up in
+a fixed shape, and answer "which did you like more?" pairs. Two curators, no login.
+Everything you type is versioned and exported: that's the input for the recommender
+(phase 2) and the swipe room (phase 3).
 
 ## Run it
 
@@ -16,15 +20,32 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python app.py              # http://localhost:8000
 ```
 
-Posters (optional). Free key: https://www.themoviedb.org/settings/api
+Posters, overviews, keywords, Rotten Tomatoes and Metacritic come from Radarr's metadata
+service, no account needed (`enrich_tmdb.py` / `enrich_omdb.py` remain as alternatives):
 
 ```bash
-TMDB_API_KEY=your_key .venv/bin/python enrich_tmdb.py     # ~25 min, safe to stop and re-run
+.venv/bin/python enrich_radarr.py     # ~35 min, safe to stop and re-run; then ./publish.sh
 ```
 
 ## Workflow
 
-Three modes in the header:
+**Who's marking.** The two names next to the title (Santi, amber · Paola, purple) say whose
+marks you're looking at and writing; the whole header takes that person's colour. Every mark,
+score, end-feeling, tag, duel and note is stored per curator; the other person's mark shows on
+each card as a small chip in their colour. Labels (sub-genres) are a property of the film and
+shared. To add a curator, add a row to `CURATORS` in `setup.py`.
+
+**Who writes what.** Drag a poster onto a name: that film goes into that person's to-write
+queue (the counter on the name, the ✎ badge on the card). "my queue" in the filters shows
+your own; triage runs through it. Scoring the film, or writing any note, takes it out of the
+queue. A queue is a to-do, not an opinion: both of you can still mark any film.
+
+**Lists as projects.** Pick a list in the filter (IMDb Top 250, your Letterboxd lists…)
+and the bar above the grid shows, for every curator, how much of it is seen, tiered and
+noted. Work through it in triage or browse under your own name; the consolidation is
+automatic because the list is the same and the marks are per person.
+
+Modes in the header (each has its own `#url`; a film's write-up is `#film/tt…`):
 
 - **browse** — the grid. Filter, click a poster, write it up.
   Search matches title and director. If a film isn't there, search shows a
@@ -32,13 +53,45 @@ Three modes in the header:
 - **triage** — one film at a time, keyboard only. `S` seen (opens the write-up),
   `W` want to see, `N` not seen, `→` skip, `←` back. Put the status filter on
   "unmarked" and sort by popularity, then just go.
-- **compare** — two films you've seen, "which did you like more?" `←` `→` `↓` can't say.
-  Mostly picks pairs inside the same tier, because that's where the order is unknown.
-  This is the strongest ranking signal you can give a model, and the fastest to answer.
+- **compare** — two films you've seen, "which did you like more?" `←` `→` `↓` can't say,
+  then one line of *because…* (Enter saves, Esc skips the line). Mostly picks pairs at the
+  same score, because that's where the order is unknown; "same score only" and a score
+  filter narrow it.
+- **ladder** — one score, your films at it, drag (or `↑` `↓`) to put them in order. Films you
+  haven't ordered sort by their duel win rate. Click a title to write it up.
+- **progress** — both of you side by side: a summary box each, then per genre, decade, label,
+  list, scale step and end-feeling: seen / scored / felt / noted / to write / unmarked per
+  person. Click a row to browse exactly that. Quick links for "seen, not noted", "seen, not
+  scored", "seen, no end-feeling" and "my queue"; the status filter has them too.
+- **words** — the vocabulary everything is written in: name the scale steps; rename, merge,
+  regroup and delete end-feelings, tags and labels. A rename or merge rewrites every film
+  that carries the word.
 
-The write-up (seen films): tier · how often / when / how well you remember it ·
-tags, where one click = `+` (this is why it worked) and two = `−` (this is what
-went wrong) · the note. Write the note for a person, not for the machine.
+**The write-up** opens on any poster and stays open while you go `Ctrl+←` / `Ctrl+→`
+through the films of the current filter. It saves itself as you type ("saved" bottom
+right); `Esc` or `Ctrl+Enter` closes it (and moves on, in triage). Keys `1`–`9` `0` `-` `=`
+pick the tier when you're not in a text field; `/` jumps to the new-tag box.
+
+- status (seen / want / not seen) · **score** on a −10…+10 scale (`=` up, `-` down when not
+  typing). Any step can carry a name: type it next to the number, or on the **words** page.
+  Names are labels on numbers, so renaming never touches a film. The old tiers are the seeds
+  (+10 my favourite … −10 the worst shit ever); the other steps start unnamed.
+- **end-feeling**: what it left you with when it ended, one or two from a fixed list
+  (wrecked, unsettled, hollow, shaken, warm, giddy, cosy, moved, wired, satisfied, puzzled,
+  cheated, numb, annoyed, delighted-by-the-mess), each at 1–3. The visitor's first question in
+  phase 2 is "what did you feel at the end?", in these same words.
+- how often / when / how well you remember it
+- **Why it reached me** — feeling and mechanism, not plot. The field the AI reads.
+  "You know from minute one she's screwed" is worth more than a paragraph of plot.
+- What it's about · Who it's for · Who should avoid it · Anything else
+- a counter under each text field says when a note is getting long for a note. It's a guide,
+  not a limit: the fields are for feeling and mechanism; plot lives on TMDB already.
+- tags: one click `+` why it worked, two `−` what went wrong, three off. Suggestions above
+  the list come from tags you used on films with the same director, a shared label or
+  shared themes.
+- labels: your sub-genres (folk horror, home invasion, new french extremity…).
+
+Write for a person (for Paola), not for the machine; the machine reads it better that way too.
 
 - **for you** — unseen films scored by what they share with what you tiered: director >
   TMDB themes > genre > decade, list membership and your want list as small boosts, what you
@@ -68,15 +121,56 @@ OMDB_API_KEY=xxx .venv/bin/python enrich_omdb.py              # resumes where it
 
 Adds 🍅 and Metacritic to cards, "by Rotten Tomatoes" to the sort, `rt`/`metacritic` to exports.
 
+## Online edition (GitHub Pages)
+
+GitHub Pages can't run `app.py`, so `docs/` holds the same app with the server ported to the
+browser: `docs/shim.js` is `app.py` in JavaScript, running the same SQL on the same database
+(`docs/data/films.db.gz`, SQLite in WASM via sql.js). Same page, same modes, same keys.
+
+Your marks are private, so they are **not** in the public database. They live in the browser
+(always, so a reload loses nothing) and, once you give the page a token, in a **private** GitHub
+repo as `state.json`. That is what syncs laptops, and what the media server pulls.
+
+One-time setup, by hand (these need your GitHub login):
+
+1. Create a private repo, e.g. `SScleves/criticnextdoor-state`. Leave it empty.
+2. Make a fine-grained token: github.com → Settings → Developer settings → Fine-grained tokens.
+   Repository access: only that repo. Permission: Contents, read and write. Nothing else.
+3. Open the Pages app, click the gear bottom right, paste repo and token, "save & sync".
+   Repeat step 3 on each laptop. The token stays in that browser; it is sent only to api.github.com.
+
+On the media server, `python sync_state.py` pulls `state.json`, merges it into `films.db`
+(per mark the newest wins, pairs and events are unioned), pushes the merged file back and
+refreshes `exports/`. Run it whenever you marked things elsewhere, or on a timer.
+
+Rebuild and publish after the catalogue changes (setup, imports, lists, posters, scores):
+
+```bash
+.venv/bin/python build_static.py && git add docs && git commit -m "docs: rebuild" && git push
+```
+
+Pages serves `main`/`docs`, so merge or cherry-pick into `main` if you work on a branch.
+
 ## Where your words live
 
-- `films.db` — everything, sqlite. `my` is the current state, `events` is the
-  append-only history of every change, `pairs` are the comparisons.
-- `exports/` — rewritten after every save: `marks.jsonl`, `pairs.jsonl`,
-  `events.jsonl`, `vocab.jsonl`. If `exports/` is a git repo it auto-commits,
-  and pushes if a remote is set. Make that remote **private** — the notes are yours.
-- `/api/export.csv` and `/api/export.json` — the same data over HTTP.
+- `films.db` — everything, sqlite. `marks` is the current state (one row per curator per
+  film, with `score`), `mark_tags` and `mark_feelings` the tags and end-feelings on them,
+  `film_labels` the labels, `scale` the names of the 21 steps, `queue` who writes what,
+  `pairs` the comparisons (with `reason`), `events` the append-only history of every change.
+- `exports/` — rewritten after every save: `marks.jsonl`, `pairs.jsonl`, `events.jsonl`,
+  `queue.jsonl`, `vocab.jsonl` (scale, feelings, tags, labels), `marks.csv` (everyone), and per curator `marks_<id>.csv` and
+  **`notes_<id>.md`**: every seen film as a fixed-shape markdown entry (tier, labels, tags,
+  the four fields). That file is what phase 2 hands to the model. If `exports/` is a git
+  repo it auto-commits, and pushes if a remote is set. Make that remote **private**.
+- `/api/export.csv[?curator=santi]`, `/api/export.md?curator=santi`, `/api/export.json` —
+  the same over HTTP (the export menu in the header).
 - `restore.py` — puts `exports/marks.jsonl` back into a fresh `films.db`.
+
+**Upgrading.** From the tier version: marks get their `score` from the tier name on first
+start (my favourite → +10 … the worst shit ever → −10). From the single-curator version: Start the app once: it copies `films.db` to
+`films.db.before-curators.<date>`, moves every row of the old `my` table to `marks` under
+`santi` (tags included), gives the old pairs and events an owner, and keeps the old table as
+`my_legacy`. Plex-imported "seen" marks land on `santi` too (`FILMCAT_IMPORT_CURATOR` changes that).
 
 So: `films.db` can be rebuilt from IMDb + `exports/` any time. Back up `exports/`.
 
