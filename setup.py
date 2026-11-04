@@ -154,19 +154,23 @@ TIERS = [  # (name, score, order): the original tier names. They seed the -10..1
     ("really bad", -6, 10), ("awful", -8, 11), ("the worst shit ever", -10, 12),
 ]
 
-TAGS = [  # starter vocabulary; add/edit in the app
-    ("defenceless-from-start", "fear"), ("no-way-out-geography", "fear"),
-    ("the-threat-is-in-the-family", "fear"), ("slow-dread", "fear"),
-    ("jump-scares", "fear"), ("body-horror", "fear"), ("home-invasion", "fear"),
-    ("nothing-is-explained", "structure"), ("slow-reveal", "structure"),
-    ("twist", "structure"), ("one-location", "structure"), ("real-time", "structure"),
-    ("funny-then-not", "tone"), ("no-jokes", "tone"), ("bleak", "tone"),
-    ("cozy", "tone"), ("feel-good", "tone"), ("melancholic", "tone"),
-    ("brutal", "intensity"), ("gentle", "intensity"), ("loud", "intensity"),
-    ("sound-design-carries-it", "craft"), ("gorgeous-images", "craft"),
-    ("great-script", "craft"), ("one-performance", "craft"),
-    ("sunday-alone", "occasion"), ("friday-with-friends", "occasion"),
-    ("date-night", "occasion"), ("hungover", "occasion"),
+TAGS = [  # starter vocabulary, one group per angle a film can reach you from; add/edit in the app
+    ("defenceless-from-start", "fear"), ("no-way-out", "fear"), ("the-threat-is-in-the-family", "fear"),
+    ("slow-dread", "fear"), ("jump-scares", "fear"), ("body-horror", "fear"), ("something-is-off", "fear"),
+    ("bleak", "tone"), ("cosy", "tone"), ("deadpan", "tone"), ("feverish", "tone"), ("tender", "tone"),
+    ("nasty", "tone"), ("funny-then-not", "tone"), ("no-jokes", "tone"), ("feel-good", "tone"), ("melancholic", "tone"),
+    ("slow-reveal", "structure"), ("twist", "structure"), ("nothing-is-explained", "structure"),
+    ("real-time", "structure"), ("one-location", "structure"), ("fragmented", "structure"), ("nonlinear", "structure"),
+    ("patient", "pacing"), ("relentless", "pacing"), ("breathes", "pacing"), ("drags", "pacing"), ("too-long", "pacing"),
+    ("one-character-all-the-way", "point of view"), ("childs-eyes", "point of view"), ("unreliable-narrator", "point of view"),
+    ("ensemble", "point of view"), ("distant-observer", "point of view"),
+    ("the-images", "craft"), ("the-sound", "craft"), ("the-editing", "craft"), ("one-performance", "craft"),
+    ("the-script", "craft"), ("the-score", "craft"), ("production-design", "craft"),
+    ("grief", "theme"), ("loyalty", "theme"), ("class", "theme"), ("faith", "theme"), ("obsession", "theme"),
+    ("loneliness", "theme"), ("family-as-trap", "theme"), ("growing-up", "theme"), ("what-we-owe-each-other", "theme"),
+    ("earned", "ending"), ("gut-punch", "ending"), ("open", "ending"), ("too-neat", "ending"), ("falls-apart", "ending"),
+    ("sunday-alone", "occasion"), ("friday-with-friends", "occasion"), ("date-night", "occasion"),
+    ("hungover", "occasion"), ("with-the-kids", "occasion"),
 ]
 
 

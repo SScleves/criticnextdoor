@@ -125,6 +125,19 @@
   .by{display:inline-flex;gap:6px;align-items:baseline;font-variant-numeric:tabular-nums} .by i{font-style:normal;font-size:10px;font-weight:700;color:var(--who)}
   .qbtns{display:flex;gap:6px} .qbtns button{flex:1;border:2px solid var(--who);padding:7px;font-weight:600}
   .qbtns button.on{background:var(--who);color:#111}
+  .wrow{display:flex;flex-direction:column;gap:7px;padding:9px 11px;border-radius:10px;border-left:4px solid var(--k);background:var(--kbg)}
+  .wrow.lab{--k:var(--p);--kbg:#201c25} .wrow.pos{--k:var(--acc);--kbg:#221f18} .wrow.neg{--k:var(--neg);--kbg:#241a1a}
+  .wrow .wh{display:flex;justify-content:space-between;align-items:baseline;gap:8px} .wrow .wh b{color:var(--k);font-size:13px} .wrow .wh small{color:var(--mute);font-size:11px;text-align:right}
+  .wrow .wc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .wrow .wc input{flex:1;min-width:110px;padding:4px 8px;font-size:12px;border:1px dashed #4a4a55;border-radius:14px;background:var(--bg)}
+  .wrow .chip{border-color:var(--k);background:var(--k);color:#111;font-weight:600} .wrow.neg .chip{color:#fff}
+  .wrow .chip::before{content:"" !important} .wrow .chip .ang{font-size:9px;opacity:.65;margin-left:4px;font-weight:400}
+  .wrow .chip.auto{border-style:dashed;background:#6d4f80;color:#fff}
+  .angles{display:flex;flex-wrap:wrap;gap:6px} .angles button{font-size:12px;padding:5px 10px;border-radius:6px;color:var(--mute)} .angles button.on{background:#2e2a1c;border-color:var(--acc);color:var(--fg);font-weight:600}
+  .angles button i{font-style:normal;color:var(--acc);margin-left:4px} .angles button i.n{color:var(--neg)}
+  .angles button.new{border-style:dashed;background:transparent}
+  .apanel{display:flex;flex-direction:column;gap:7px;padding:9px 11px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)}
+  .apanel .ah{font-size:12px;color:var(--mute);display:flex;justify-content:space-between} .apanel .ah input{width:90px;padding:3px 7px;font-size:11px;border:1px dashed #4a4a55;border-radius:12px;background:var(--bg)}
   .chip.sug{border-style:dashed} .chip .c{color:var(--mute);font-size:10px;margin-left:4px} .chip.on .c,.chip.neg .c{color:inherit;opacity:.7}
   .grp{font-size:11px;color:var(--mute);margin:6px 0 2px;width:100%}
   textarea{width:100%;resize:vertical;line-height:1.45;font-size:15px}
@@ -652,18 +665,23 @@ function openSheet(f, adv=false){
       </div>
       ${field("note", "Anything else", "context, memories, where you saw it", "Saw it at a festival in Lyon with no idea what it was.")}
     </div>
-    <div class="col right">
-      <div class="row"><label>labels <small>· sub-genre and tone, a property of the film, shared with everyone · dashed = suggested from the data, click off if wrong</small></label>
-        <div class="chips" id="labelchips">${labelChips}</div>
-        <input type="search" id="newlabel" list="labellist" placeholder="add a label, Enter" style="min-width:160px;padding:4px 8px;font-size:12px;margin-top:8px">
-        <datalist id="labellist">${META.labels.map(l=>`<option value="${esc(l.name)}">`).join("")}</datalist>
-      </div>
+    <div class="col right" id="words">
+      <div class="wrow lab"><div class="wh"><b>What is it?</b><small>sub-genre · shared with everyone</small></div>
+        <div class="wc" id="w-lab"></div></div>
       <div class="seenonly" style="${f.status==="seen"?"":"display:none"}">
-        <div class="row"><label>tags <small>· click once: <span style="color:var(--acc)">+ why it worked</span>, twice: <span style="color:var(--neg)">− what went wrong</span>, thrice: off · <kbd>/</kbd> new tag</small></label>
-          <div id="sug" class="chips" style="margin-bottom:6px"></div>
-          <div class="chips" id="chips">${chips}</div>
-          <input type="search" id="newtag" placeholder="new tag, Enter" style="min-width:160px;padding:4px 8px;font-size:12px;margin-top:8px">
-        </div>
+      <div class="wrow pos" style="margin-top:10px"><div class="wh"><b>Why it reached you</b><small>yours · what the AI reads</small></div>
+        <div class="wc" id="w-pos"></div></div>
+      <div class="wrow neg" style="margin-top:10px"><div class="wh"><b>What went wrong</b><small>yours · empty if nothing did</small></div>
+        <div class="wc" id="w-neg"></div></div>
+      <div class="row"><label>more angles <small>· open one · click a word once = reached you, twice = went wrong, again = off</small></label>
+        <div class="angles" id="angles"></div>
+        <div class="apanel" id="apanel" style="margin-top:8px" hidden></div>
+        <div id="sug" class="chips" style="margin-top:8px"></div>
+      </div>
+      </div>
+      <div class="row"><label>all sub-genres <small>· click to open</small></label>
+        <div class="angles" id="lgroups"></div>
+        <div class="apanel" id="lpanel" style="margin-top:8px" hidden></div>
       </div>
     </div></div>
     <div class="bottom"><span class="hint"><kbd>Esc</kbd> close · <kbd>Ctrl</kbd>+<kbd>←</kbd> <kbd>→</kbd> previous / next film · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> done${advance?" (next in triage)":""}</span>
@@ -679,7 +697,12 @@ function openSheet(f, adv=false){
     if (b.dataset.s === "seen") $("#m-reached").focus();
     touch();
   });
-  $("#chips").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; cycle(c); touch(); };
+  // words: tags and labels live in two maps; the column is re-rendered from them
+  W = {tags: {}, labels: new Set(labs), auto, angle: null, lgroup: null};
+  all.forEach(t => { if (t.startsWith("-")) W.tags[t.slice(1)] = -1; else W.tags[t] = 1; });
+  const horror = /Horror|Thriller/.test(f.genres||"");
+  W.angle = Object.keys(W.tags).length ? (META.tags.find(t=>W.tags[t.name])||{}).grp : (horror ? "fear" : "theme");
+  renderWords();
   $("#qbtns").onclick = async e => { const b = e.target.closest("[data-q]"); if (!b) return;
     const on = !b.classList.contains("on"); await toggleQueue(f, b.dataset.q, on); b.classList.toggle("on", on); };
   $("#m-scale").onclick = e => { const b = e.target.closest("[data-score]"); if (!b) return; setScore(b.classList.contains("on") ? null : +b.dataset.score); touch(); };
@@ -694,31 +717,6 @@ function openSheet(f, adv=false){
     touch(); };
   sh.querySelectorAll("textarea[data-guide]").forEach(t => { const g = () => { const n = t.value.trim().length, lim = +t.dataset.guide, el = $("#g-"+t.id.slice(2));
     el.textContent = n ? (n > lim ? `${n} chars · long for a note, is some of this plot?` : `${n} / ~${lim}`) : ""; el.className = "guide" + (n > lim ? " over" : ""); }; t.addEventListener("input", g); g(); });
-  $("#sug").onclick = e => { const c = e.target.closest(".chip"); if (!c) return;
-    const real = $("#chips").querySelector(`[data-tag="${CSS.escape(c.dataset.tag)}"]`);
-    if (real) { if (!real.classList.contains("on")) { real.classList.remove("neg"); real.classList.add("on"); } }
-    else $("#newtag").insertAdjacentHTML("beforebegin", `<span class="chip on" data-tag="${esc(c.dataset.tag)}">${esc(c.dataset.tag)}</span>`);
-    c.remove(); touch(); };
-  $("#labelchips").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; c.classList.toggle("on"); touch(); };
-  $("#newtag").onkeydown = async e => {
-    if (e.key !== "Enter" || !e.target.value.trim()) return;
-    e.preventDefault();
-    const r = await api("/api/tag", {name: e.target.value});
-    if (!META.tags.find(t=>t.name===r.name)) META.tags.push({name:r.name, grp:"custom", pos:0, neg:0, n:0});
-    const ex = $("#chips").querySelector(`[data-tag="${CSS.escape(r.name)}"]`);
-    if (ex) { ex.classList.remove("neg"); ex.classList.add("on"); }
-    else e.target.insertAdjacentHTML("beforebegin", `<span class="chip on" data-tag="${esc(r.name)}">${esc(r.name)}</span>`);
-    e.target.value = ""; touch();
-  };
-  $("#newlabel").onkeydown = e => {
-    if (e.key !== "Enter" || !e.target.value.trim()) return;
-    e.preventDefault();
-    const name = e.target.value.trim().toLowerCase().split(/\s+/).join("-");
-    const ex = $("#labelchips").querySelector(`[data-label="${CSS.escape(name)}"]`);
-    if (ex) ex.classList.add("on");
-    else $("#labelchips").insertAdjacentHTML("beforeend", `<span class="chip lab on" data-label="${esc(name)}">${esc(name)}</span>`);
-    e.target.value = ""; touch();
-  };
   sh.querySelectorAll("textarea, select").forEach(el => { el.oninput = touch; el.onchange = touch; });
   $("#done").onclick = done; $("#prev").onclick = () => step(-1); $("#next").onclick = () => step(1);
   if (adv && f.status !== "seen") sh.querySelector('[data-s="seen"]').click();
@@ -743,9 +741,62 @@ function cycle(c){
 async function loadSuggestions(f){
   const r = await api("/api/suggest?tconst=" + f.tconst);
   if (current !== f) return;
-  const have = new Set([...$("#chips").querySelectorAll(".chip.on,.chip.neg")].map(c=>c.dataset.tag));
-  const sug = r.tags.filter(t => !have.has(t.name)).slice(0, 8);
-  $("#sug").innerHTML = sug.length ? `<div class="grp">suggested, from films like this one</div>` + sug.map(t=>`<span class="chip sug" data-tag="${esc(t.name)}" title="${esc(t.why.join("\n"))}">${esc(t.name)}</span>`).join("") : "";
+  W.sug = r.tags.map(t => t.name); W.sugWhy = Object.fromEntries(r.tags.map(t => [t.name, t.why.join("\n")]));
+  renderSug();
+}
+function renderSug(){
+  const sug = (W.sug||[]).filter(t => !W.tags[t]).slice(0, 8);
+  $("#sug").innerHTML = sug.length ? `<div class="grp">suggested, from films like this one · one click</div>` + sug.map(t=>`<span class="chip sug" data-tag="${esc(t)}" title="${esc(W.sugWhy[t]||"")}" style="border-color:var(--acc);color:var(--acc)">${esc(t)}</span>`).join("") : "";
+}
+
+// ---- the words column: three rows (what it is / why it reached you / what went wrong) + angles ----
+let W = null;
+const tagGroup = name => (META.tags.find(t=>t.name===name)||{}).grp || "custom";
+function renderWords(){
+  if (!W) return;
+  const chip = (name, kind, extra="") => `<span class="chip ${extra}" data-w="${kind}" data-name="${esc(name)}" title="click to remove">${esc(name)}${kind!=="lab"?`<span class="ang">${esc(tagGroup(name))}</span>`:""}</span>`;
+  $("#w-lab").innerHTML = [...W.labels].map(l => chip(l, "lab", W.auto.has(l) ? "auto" : "")).join("") + `<input type="search" id="add-lab" list="labellist" placeholder="+ add or create…"><datalist id="labellist">${META.labels.map(l=>`<option value="${esc(l.name)}">`).join("")}</datalist>`;
+  const pos = Object.keys(W.tags).filter(t=>W.tags[t]>0), neg = Object.keys(W.tags).filter(t=>W.tags[t]<0);
+  $("#w-pos").innerHTML = pos.map(t => chip(t, "pos")).join("") + `<input type="search" id="add-pos" list="taglist" placeholder="+ add or create…"><datalist id="taglist">${META.tags.map(t=>`<option value="${esc(t.name)}">`).join("")}</datalist>`;
+  $("#w-neg").innerHTML = neg.map(t => chip(t, "neg")).join("") + `<input type="search" id="add-neg" list="taglist" placeholder="+ add or create…">`;
+  const groups = [...new Set(META.tags.map(t=>t.grp))];
+  $("#angles").innerHTML = groups.map(g => { const n = META.tags.filter(t=>t.grp===g && W.tags[t.name]>0).length, m = META.tags.filter(t=>t.grp===g && W.tags[t.name]<0).length;
+    return `<button type="button" data-angle="${esc(g)}" class="${g===W.angle?"on":""}">${esc(g)}${n?`<i>${n}</i>`:""}${m?`<i class="n">${m}</i>`:""}</button>`; }).join("") + `<button type="button" class="new" data-angle="+">+ new angle</button>`;
+  const ap = $("#apanel");
+  if (W.angle && W.angle !== "+") { ap.hidden = false;
+    ap.innerHTML = `<div class="ah"><span>${esc(W.angle)}</span><input type="search" id="add-angle" placeholder="+ new…"></div><div class="chips">` +
+      META.tags.filter(t=>t.grp===W.angle).map(t => `<span class="chip ${W.tags[t.name]>0?"on":W.tags[t.name]<0?"neg":""}" data-tag="${esc(t.name)}">${esc(t.name)}${t.pos?`<span class="c">${t.pos}</span>`:""}</span>`).join("") + `</div>`;
+  } else if (W.angle === "+") { ap.hidden = false; ap.innerHTML = `<div class="ah"><span>new angle</span></div><div class="chips"><input type="search" id="add-group" placeholder="angle name, Enter (e.g. rhythm)" style="min-width:200px"></div>`; }
+  else ap.hidden = true;
+  const lg = [...new Set(META.labels.map(l=>l.grp))];
+  $("#lgroups").innerHTML = lg.map(g => `<button type="button" data-lgroup="${esc(g)}" class="${g===W.lgroup?"on":""}">${esc(g)}</button>`).join("");
+  const lp = $("#lpanel");
+  if (W.lgroup) { lp.hidden = false; lp.innerHTML = `<div class="chips">` + META.labels.filter(l=>l.grp===W.lgroup).map(l => `<span class="chip lab ${W.labels.has(l.name)?"on":""}" data-label="${esc(l.name)}">${esc(l.name)}${l.n?`<span class="c">${l.n}</span>`:""}</span>`).join("") + `</div>`; }
+  else lp.hidden = true;
+  renderSug(); wireWords();
+}
+function wireWords(){
+  const w = $("#words");
+  w.onclick = e => {
+    const rm = e.target.closest("[data-w]"); if (rm) { if (rm.dataset.w === "lab") W.labels.delete(rm.dataset.name); else delete W.tags[rm.dataset.name]; renderWords(); touch(); return; }
+    const a = e.target.closest("[data-angle]"); if (a) { W.angle = W.angle === a.dataset.angle ? null : a.dataset.angle; renderWords(); if (W.angle === "+") $("#add-group")?.focus(); return; }
+    const lgb = e.target.closest("[data-lgroup]"); if (lgb) { W.lgroup = W.lgroup === lgb.dataset.lgroup ? null : lgb.dataset.lgroup; renderWords(); return; }
+    const c = e.target.closest("#apanel .chip[data-tag], #sug .chip[data-tag]"); if (c) { const t = c.dataset.tag, cur = W.tags[t] || 0;
+      if (c.closest("#sug")) W.tags[t] = 1; else if (cur === 0) W.tags[t] = 1; else if (cur > 0) W.tags[t] = -1; else delete W.tags[t];
+      renderWords(); touch(); return; }
+    const l = e.target.closest("#lpanel .chip[data-label]"); if (l) { const n = l.dataset.label; if (W.labels.has(n)) W.labels.delete(n); else W.labels.add(n); renderWords(); touch(); return; }
+  };
+  const addWord = async (inp, kind) => {
+    const raw = inp.value.trim(); if (!raw) return; inp.value = "";
+    if (kind === "lab") { const r = await api("/api/label", {name: raw}); if (!META.labels.find(l=>l.name===r.name)) META.labels.push({name:r.name, grp:"custom", n:0}); W.labels.add(r.name); }
+    else { const grp = kind === "angle" ? W.angle : (META.tags.find(t=>t.name===norm(raw))||{}).grp || "custom";
+      const r = await api("/api/tag", {name: raw, grp}); if (!META.tags.find(t=>t.name===r.name)) META.tags.push({name:r.name, grp, pos:0, neg:0, n:0});
+      W.tags[r.name] = kind === "neg" ? -1 : 1; }
+    renderWords(); touch();
+  };
+  const norm = x => x.trim().toLowerCase().split(/\s+/).join("-");
+  for (const [id, kind] of [["add-lab","lab"],["add-pos","pos"],["add-neg","neg"],["add-angle","angle"]]) { const inp = w.querySelector("#"+id); if (inp) inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); addWord(inp, kind); } }; }
+  const g = w.querySelector("#add-group"); if (g) g.onkeydown = e => { if (e.key === "Enter" && g.value.trim()) { e.preventDefault(); W.angle = g.value.trim().toLowerCase(); META.tags.push({name:"__placeholder__", grp:W.angle, pos:0, neg:0, n:0}); META.tags = META.tags.filter(t=>t.name!=="__placeholder__"); renderWords(); $("#add-angle")?.focus(); } };
 }
 
 function touch(){
@@ -761,8 +812,8 @@ function body(){
   return { tconst: f.tconst, status,
     score: seen ? currentScore() : null,
     feelings: seen ? [...sh.querySelectorAll("#feelchips .chip.on")].map(c=>`${c.dataset.feel}:${c.dataset.i}`) : [],
-    tags: seen ? [...sh.querySelectorAll("#chips .chip.on")].map(c=>c.dataset.tag).concat([...sh.querySelectorAll("#chips .chip.neg")].map(c=>"-"+c.dataset.tag)) : [],
-    labels: [...sh.querySelectorAll("#labelchips .chip.on")].map(c=>c.dataset.label),
+    tags: seen ? Object.entries(W.tags).map(([t,p]) => (p < 0 ? "-" : "") + t) : [],
+    labels: [...W.labels],
     about: seen ? v("about") : null, reached: seen ? v("reached") : null, for_whom: seen ? v("for_whom") : null, avoid: seen ? v("avoid") : null,
     note: v("note"), times: seen ? v("times") : null, when_seen: seen ? v("when") : null, memory: seen ? v("memory") : null };
 }
@@ -829,7 +880,7 @@ document.onkeydown = e => {
     if ((e.ctrlKey || e.metaKey) && e.key === "ArrowRight") { e.preventDefault(); step(1); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "ArrowLeft") { e.preventDefault(); step(-1); return; }
     if (!typing || tag === "SELECT") {
-      if (e.key === "/") { e.preventDefault(); $("#newtag")?.focus(); return; }
+      if (e.key === "/") { e.preventDefault(); $("#add-pos")?.focus(); return; }
       if ((e.key === "=" || e.key === "+" || e.key === "-") && $("#m-scale") && $("#sheet").querySelector(".seg button.on")?.dataset.s === "seen" && e.target.id !== "m-scaleinput") {
         e.preventDefault(); const cur = currentScore(), d = e.key === "-" ? -1 : 1;
         setScore(cur == null ? (d > 0 ? 6 : 0) : Math.max(-10, Math.min(10, cur + d))); touch(); }
