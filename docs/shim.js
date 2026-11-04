@@ -145,14 +145,17 @@
       for (const t of s.tags || []) run("INSERT OR IGNORE INTO tags VALUES (?,?)", [t.name, t.grp || "custom"]);
       for (const l of s.labels || []) run("INSERT OR IGNORE INTO labels VALUES (?,?)", [l.name, l.grp || "custom"]);
       for (const f of s.feelings || []) run("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", [f.name, f.grp || "custom", f.es || ""]);
-      for (const x of s.scale || []) run("INSERT INTO scale VALUES (?,?) ON CONFLICT(score) DO UPDATE SET name=excluded.name", [x.score, x.name || ""]);
+      for (const x of s.scale || []) {   // a saved blank or legacy name never beats the 21 fixed labels
+        const stale = !x.name || x.name.toLowerCase() === (TIER_NAMES[x.score] || "").toLowerCase();
+        run("INSERT INTO scale VALUES (?,?) ON CONFLICT(score) DO UPDATE SET name=excluded.name", [x.score, stale ? (SCALE_NAMES[x.score] || "") : x.name]);
+      }
       for (const x of s.queue || []) run("INSERT OR IGNORE INTO queue (curator,tconst,added) VALUES (?,?,?)", [x.curator, x.tconst, x.added || now()]);
       const byName = scoreByName();
       for (const m of s.marks || []) {
         const score = m.score ?? (m.tier ? byName[m.tier] ?? null : null);   // a v1 mark carries a tier name
         run(`INSERT OR IGNORE INTO marks (curator,tconst,status,score,tier,rank,favourite,guilty,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
              VALUES (?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [m.curator, m.tconst, m.status, score, m.rank, m.favourite ? 1 : 0, m.guilty ?? null, m.times, m.when_seen, m.memory, m.about, m.reached, m.for_whom, m.avoid, m.note, m.source, m.updated]);
+          [m.curator || "santi", m.tconst, m.status ?? null, score, m.rank ?? null, m.favourite ? 1 : 0, m.guilty ?? null, m.times ?? null, m.when_seen ?? null, m.memory ?? null, m.about ?? null, m.reached ?? null, m.for_whom ?? null, m.avoid ?? null, m.note ?? null, m.source ?? null, m.updated ?? now()]);
         for (const t of m.tags || []) {
           const neg = t.startsWith("-"), name = neg ? t.slice(1) : t;
           run("INSERT OR IGNORE INTO tags VALUES (?,?)", [name, "custom"]);

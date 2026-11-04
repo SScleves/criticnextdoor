@@ -8,6 +8,7 @@ added from the pool (added=list) so a list is never silently short.
     python lists.py url "Sight & Sound 2022" https://… # a page whose HTML has imdb.com/title/tt… links, in order
     python lists.py letterboxd ~/letterboxd-export     # YOUR Letterboxd export: watched/ratings/watchlist + lists/*.csv
     python lists.py all                               # every lists/*.csv in this repo (the list name is the file name)
+    python lists.py decades                           # Horror · 1980s, Sci-Fi · 2010s …: top 40 per genre and decade, from IMDb
     python lists.py show                              # what's loaded, how much of each you've seen
     python lists.py drop "name"
 
@@ -108,6 +109,24 @@ def imdb_top(con, n=250, min_votes=25000):
     c = sum(r["rating"] for r in rows) / len(rows)
     rows.sort(key=lambda r: -(r["votes"] / (r["votes"] + min_votes) * r["rating"] + min_votes / (r["votes"] + min_votes) * c))
     save(con, "IMDb Top 250", [r["tconst"] for r in rows[:n]], " (computed from the IMDb dataset)")
+
+
+GENRE_DECADES = ["Horror", "Sci-Fi", "Action", "Comedy", "Thriller", "Drama", "Animation"]
+
+
+def genre_decades(con, n=40, min_votes=25000):
+    """
+    'Horror · 2010s' etc., computed from the IMDb data in the catalogue with the Top-250 weighting
+    (few votes pull a film toward the mean), so a decade's best isn't just its loudest. One list per
+    genre and decade from the 1960s on, top `n` each. Re-run after setup.py refreshes the ratings.
+    """
+    for g in GENRE_DECADES:
+        for dec in range(1960, 2030, 10):
+            rows = con.execute("""SELECT tconst FROM films WHERE decade=? AND (',' || genres || ',') LIKE ? AND votes>=?
+                                  ORDER BY (votes*rating + 100000*6.9)/(votes+100000.0) DESC, votes DESC LIMIT ?""",
+                               (dec, f"%,{g},%", min_votes, n)).fetchall()
+            if len(rows) >= 10:
+                save(con, f"{g} · {dec}s", [r[0] for r in rows], note=" (computed from IMDb, weighted)")
 
 
 def rows_from_csv(text):
@@ -223,6 +242,8 @@ def main():
         letterboxd(con, a[1])
     elif cmd == "drop" and len(a) == 2:
         con.execute("DELETE FROM lists WHERE list=?", (a[1],)); con.commit(); print("dropped", a[1])
+    elif cmd == "decades":
+        genre_decades(con)
     elif cmd == "all":
         for p in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lists", "*.csv"))):
             name = os.path.splitext(os.path.basename(p))[0]

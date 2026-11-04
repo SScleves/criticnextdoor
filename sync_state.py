@@ -14,7 +14,8 @@ Env: FILMCAT_STATE_REPO (ssh url), FILMCAT_STATE_DIR (default ./state)
 import argparse, json, os, sqlite3, subprocess, sys, time
 
 from app import DB, add_from_pool, write_exports
-from setup import migrate
+from setup import migrate, SCALE_NAMES, TIERS
+TIERS_BY_SCORE = {t[1]: t[0] for t in TIERS}
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = os.environ.get("FILMCAT_STATE_DIR", os.path.join(HERE, "state"))
@@ -89,8 +90,11 @@ def apply(con, s):
         con.execute("INSERT OR IGNORE INTO labels VALUES (?,?)", (l["name"], l.get("grp") or "custom"))
     for f in s.get("feelings", []):
         con.execute("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", (f["name"], f.get("grp") or "custom", f.get("es") or ""))
-    for x in s.get("scale", []):
-        con.execute("INSERT INTO scale VALUES (?,?) ON CONFLICT(score) DO UPDATE SET name=excluded.name", (x["score"], x.get("name") or ""))
+    for x in s.get("scale", []):   # a saved blank or legacy name never beats the 21 fixed labels
+        name = x.get("name") or ""
+        if not name or name.lower() == (TIERS_BY_SCORE.get(x["score"]) or "").lower():
+            name = SCALE_NAMES.get(x["score"], "")
+        con.execute("INSERT INTO scale VALUES (?,?) ON CONFLICT(score) DO UPDATE SET name=excluded.name", (x["score"], name))
     for x in s.get("queue", []):
         con.execute("INSERT OR IGNORE INTO queue (curator,tconst,added) VALUES (?,?,?)", (x["curator"], x["tconst"], x.get("added") or now()))
     by_name = {r[0]: r[1] for r in con.execute("SELECT name, score FROM scale WHERE name<>''")}
