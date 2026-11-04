@@ -298,6 +298,7 @@
     const c = checkCurator(p.get("curator") || DEFAULT_CURATOR);
     const genres = [...new Set(q("SELECT genres FROM films").flatMap(r => parts(r.genres, ",")))].sort();
     const decades = q("SELECT DISTINCT decade FROM films ORDER BY decade").map(r => r.decade);
+    const languages = q("SELECT language AS name, COUNT(*) AS n FROM films WHERE IFNULL(language,'')<>'' GROUP BY language ORDER BY n DESC");
     const scale = q("SELECT sc.score, sc.name, (SELECT COUNT(*) FROM marks m WHERE m.score=sc.score AND m.curator=? AND m.status='seen') AS n FROM scale sc ORDER BY sc.score DESC", [c]);
     const feelings = q(`SELECT fe.name, fe.grp, fe.es, (SELECT COUNT(*) FROM mark_feelings mf WHERE mf.feeling=fe.name AND mf.curator=?) AS n,
         (SELECT COUNT(*) FROM mark_feelings mf WHERE mf.feeling=fe.name) AS n_all FROM feelings fe ORDER BY fe.rowid`, [c]);
@@ -318,7 +319,7 @@
         (SELECT COUNT(*) FROM pairs WHERE curator=?1 AND skipped=0) AS pairs,
         (SELECT COUNT(*) FROM films WHERE in_library=1) AS library`, [c]);
     const queues = Object.fromEntries(curators().map(cu => [cu.id, val("SELECT COUNT(*) FROM queue WHERE curator=?", [cu.id])]));
-    return { curator: c, curators: curators(), genres, decades, scale, feelings, tags, labels, stats, queues };
+    return { curator: c, curators: curators(), genres, decades, languages, scale, feelings, tags, labels, stats, queues };
   }
 
   function whereClause(p) {
@@ -340,6 +341,7 @@
     if (g("queue")) { where.push("EXISTS (SELECT 1 FROM queue qq WHERE qq.curator=? AND qq.tconst=f.tconst)"); args.push(g("queue")); }
     if (g("tag")) { where.push("EXISTS (SELECT 1 FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=f.tconst AND mt.tag=?)"); args.push(g("tag")); }
     if (g("q")) { where.push("(f.title LIKE ? OR f.original_title LIKE ? OR f.directors LIKE ?)"); args.push(`%${g("q")}%`, `%${g("q")}%`, `%${g("q")}%`); }
+    if (g("lang")) { where.push("f.language = ?"); args.push(g("lang")); }
     if (+g("library")) where.push("f.in_library = 1");
     return { join, where: where.length ? "WHERE " + where.join(" AND ") : "", args };
   }
@@ -356,7 +358,7 @@
     if (["1", "me"].includes(p.get("queue"))) p.set("queue", c);
     const { join, where, args } = whereClause(p);
     const order = {
-      rating: "f.rating DESC, f.votes DESC", votes: "f.votes DESC", year: "f.year DESC", year_asc: "f.year ASC", title: "f.title",
+      rating: "((f.votes*f.rating + 25000*6.9)/(f.votes+25000.0)) DESC, f.votes DESC", rating_raw: "f.rating DESC, f.votes DESC", votes: "f.votes DESC", year: "f.year DESC", year_asc: "f.year ASC", title: "f.title",
       updated: "m.updated DESC", random: "RANDOM()", rt: "f.rt DESC NULLS LAST, f.rating DESC",
       tier: "m.score DESC NULLS LAST, m.rank ASC NULLS LAST, f.rating DESC",
       queue: "(SELECT added FROM queue qq WHERE qq.curator=m.curator AND qq.tconst=f.tconst) ASC, f.rating DESC",

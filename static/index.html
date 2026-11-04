@@ -123,6 +123,8 @@
   .sum .box{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--who);border-radius:8px;padding:10px 14px}
   .sum .box h3{margin:0 0 6px;font-size:16px;color:var(--who)} .sum .box .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:13px} .sum .box .kv b{font-variant-numeric:tabular-nums;text-align:right}
   .by{display:inline-flex;gap:6px;align-items:baseline;font-variant-numeric:tabular-nums} .by i{font-style:normal;font-size:10px;font-weight:700;color:var(--who)}
+  .qbtns{display:flex;gap:6px} .qbtns button{flex:1;border:2px solid var(--who);padding:7px;font-weight:600}
+  .qbtns button.on{background:var(--who);color:#111}
   .chip.sug{border-style:dashed} .chip .c{color:var(--mute);font-size:10px;margin-left:4px} .chip.on .c,.chip.neg .c{color:inherit;opacity:.7}
   .grp{font-size:11px;color:var(--mute);margin:6px 0 2px;width:100%}
   textarea{width:100%;resize:vertical;line-height:1.45;font-size:15px}
@@ -158,6 +160,7 @@
     <select id="genre"><option value="">all genres</option></select>
     <select id="label"><option value="">all labels</option></select>
     <select id="decade"><option value="0">all decades</option></select>
+    <select id="lang"><option value="">any language</option></select>
     <select id="status">
       <option value="">any status</option>
       <option value="unmarked">unmarked</option>
@@ -173,7 +176,8 @@
     <select id="tag"><option value="">any tag</option></select>
     <select id="lst"><option value="">any list</option></select>
     <select id="sort">
-      <option value="rating">by IMDb rating</option>
+      <option value="rating">by rating (weighted by votes)</option>
+      <option value="rating_raw">by raw IMDb rating</option>
       <option value="rt">by Rotten Tomatoes</option>
       <option value="rank">by list rank</option>
       <option value="tier">by my score</option>
@@ -230,6 +234,7 @@ async function loadMeta(){
   $("#genre").innerHTML = `<option value="">all genres</option>` + META.genres.map(x=>`<option>${x}</option>`).join("");
   $("#label").innerHTML = `<option value="">all labels</option>` + META.labels.map(x=>`<option value="${esc(x.name)}">${esc(x.name)} (${x.n})</option>`).join("");
   $("#decade").innerHTML = `<option value="0">all decades</option>` + META.decades.map(x=>`<option value="${x}">${x}s</option>`).join("");
+  const lg = keep("lang"); $("#lang").innerHTML = `<option value="">any language</option>` + (META.languages||[]).map(x=>`<option value="${esc(x.name)}">${esc(x.name)} (${x.n})</option>`).join(""); $("#lang").value = lg;
   $("#score").innerHTML = `<option value="">any score</option>` + META.scale.map(t=>`<option value="${t.score}">${esc(scaleLabel(t.score))}${t.n?` (${t.n})`:""}</option>`).join("");
   $("#feeling").innerHTML = `<option value="">any end-feeling</option>` + META.feelings.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}${t.n?` (${t.n})`:""}</option>`).join("");
   $("#tag").innerHTML = `<option value="">any tag</option>` + META.tags.filter(t=>t.pos+t.neg).map(t=>`<option value="${esc(t.name)}">${esc(t.name)} (${t.pos+t.neg})</option>`).join("");
@@ -245,7 +250,7 @@ async function loadMeta(){
 
 function params(){
   const p = new URLSearchParams();
-  for (const id of ["q","genre","label","decade","status","score","feeling","tag","lst","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
+  for (const id of ["q","genre","label","decade","lang","status","score","feeling","tag","lst","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
   if ($("#lib").checked) p.set("library", "1");
   if ($("#queue").checked) p.set("queue", "me");
   p.set("offset", state.offset); p.set("limit", 60);
@@ -378,7 +383,8 @@ function renderOne(){
         <button data-k="n"><kbd>N</kbd> not seen</button>
         <button data-k="skip"><kbd>→</kbd> skip</button>
         <button data-k="back"><kbd>←</kbd> back</button>
-      </div></div></div>`;
+      </div>
+      <div class="keys">${META.curators.map((c,i)=>`<button class="c-${c.id}" data-qk="${c.id}" style="border-color:var(--who)"><kbd>${i+1}</kbd> ${(f.queued||"").split(",").includes(c.id)?"✓":"✎"} ${esc(c.name)} writes it</button>`).join("")}</div></div></div>`;
 }
 
 async function triage(k){
@@ -526,7 +532,7 @@ function renderProgress(){
     setMode("browse"); load();
   });
 }
-function clearFilters(){ for (const id of ["q","genre","label","status","score","feeling","tag","lst"]) $("#"+id).value = ""; $("#decade").value = "0"; $("#lib").checked = false; $("#queue").checked = false; }
+function clearFilters(){ for (const id of ["q","genre","label","lang","status","score","feeling","tag","lst"]) $("#"+id).value = ""; $("#decade").value = "0"; $("#lib").checked = false; $("#queue").checked = false; }
 
 // ---- tags & labels manager ---------------------------------------------------
 function renderTags(){
@@ -616,7 +622,7 @@ function openSheet(f, adv=false){
       <div class="ovw">${esc(f.overview||"")}</div>
       <div class="meta" style="font-size:11px">${esc((f.keywords||"").split(",").slice(0,12).join(" · "))}</div>
       ${oth.length?`<div class="marks-others">${oth.map(([c,s,sc])=>`<span class="c-${c}"><b style="color:var(--who)">${esc(curName(c))}</b>: ${s}${sc!==""?", "+esc(scaleLabel(sc)):""}</span>`).join("<br>")}</div>`:""}
-      ${(f.queued||"").split(",").filter(Boolean).map(c=>`<div class="marks-others c-${c}" style="color:var(--who)">✎ in ${esc(curName(c))}'s to-write queue</div>`).join("")}
+      <div class="row"><label>who writes it up</label><div class="qbtns" id="qbtns">${META.curators.map(c=>`<button type="button" class="c-${c.id} ${(f.queued||"").split(",").includes(c.id)?"on":""}" data-q="${c.id}">✎ ${esc(c.name)}</button>`).join("")}</div></div>
       <div class="row"><label>status — <span style="color:var(--who)">${esc(curName(curator))}</span></label>
         <div class="seg">
           <button class="seen ${f.status==="seen"?"on":""}" data-s="seen">seen</button>
@@ -674,6 +680,8 @@ function openSheet(f, adv=false){
     touch();
   });
   $("#chips").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; cycle(c); touch(); };
+  $("#qbtns").onclick = async e => { const b = e.target.closest("[data-q]"); if (!b) return;
+    const on = !b.classList.contains("on"); await toggleQueue(f, b.dataset.q, on); b.classList.toggle("on", on); };
   $("#m-scale").onclick = e => { const b = e.target.closest("[data-score]"); if (!b) return; setScore(b.classList.contains("on") ? null : +b.dataset.score); touch(); };
   $("#m-scaleinput").onchange = async e => { const sc = currentScore(); if (sc == null) return; await api("/api/scale", {score: sc, name: e.target.value}); await loadMeta();
     $("#m-scale").querySelector(`[data-score="${sc}"] small`).textContent = e.target.value.trim(); };
@@ -797,6 +805,7 @@ function closeSheet(){
 $("#main").onclick = e => {
   const pk = e.target.closest("[data-pick]"); if (pk) { pick(pk.dataset.pick); return; }
   const k = e.target.closest("[data-k]"); if (k) { triage(k.dataset.k); return; }
+  const qk = e.target.closest("[data-qk]"); if (qk) { queueFromTriage(qk.dataset.qk); return; }
   if (e.target.id === "more") { load(false); return; }
   if (e.target.id === "poolbtn") { poolSearch(); return; }
   const add = e.target.closest("[data-add]"); if (add) { addFilm(add.dataset.add); return; }
@@ -828,12 +837,26 @@ document.onkeydown = e => {
     return;
   }
   if (typing) return;
-  if (state.mode === "triage") { const k = {s:"s",S:"s",w:"w",W:"w",n:"n",N:"n",ArrowRight:"skip",ArrowLeft:"back"}[e.key]; if (k) { e.preventDefault(); triage(k); } }
+  if (state.mode === "triage") { const k = {s:"s",S:"s",w:"w",W:"w",n:"n",N:"n",ArrowRight:"skip",ArrowLeft:"back"}[e.key]; if (k) { e.preventDefault(); triage(k); }
+    const ci = "123456789".indexOf(e.key); if (ci >= 0 && META.curators[ci]) { e.preventDefault(); queueFromTriage(META.curators[ci].id); } }
   if (state.mode === "compare" && !state.picked) { const k = {ArrowLeft:"a",ArrowRight:"b",ArrowDown:"skip"}[e.key]; if (k) { e.preventDefault(); pick(k); } }
 };
-["genre","label","decade","status","score","feeling","tag","lst","sort","lib","queue"].forEach(id => $("#"+id).onchange = () => state.mode === "foryou" ? loadForYou() : load());
+["genre","label","decade","lang","status","score","feeling","tag","lst","sort","lib","queue"].forEach(id => $("#"+id).onchange = () => state.mode === "foryou" ? loadForYou() : load());
 
-// ---- drag a poster onto a name: that person writes it ----------------------
+// ---- who writes it: buttons in the write-up and triage, or drag a poster onto a name ----
+async function toggleQueue(f, who, on){
+  const r = await api("/api/queue", {curator: who, tconst: f.tconst, on});
+  f.queued = r.queued.join(",") || null; META.queues = r.queues;
+  $("#who").querySelectorAll("[data-c]").forEach(x => x.querySelector(".q").textContent = `${r.queues[x.dataset.c]||0} to write`);
+}
+// in triage the key adds the film to that pile and moves on; pressing it on a film already there takes it out
+async function queueFromTriage(who){
+  const f = state.films[state.i]; if (!f) return;
+  const on = !(f.queued||"").split(",").includes(who);
+  await toggleQueue(f, who, on);
+  if (on) next(); else renderOne();
+}
+
 let dragId = null;
 $("#main").addEventListener("dragstart", e => { const c = e.target.closest(".card"); if (!c) return; dragId = c.dataset.id; c.classList.add("dragging"); e.dataTransfer.effectAllowed = "copy"; e.dataTransfer.setData("text/plain", dragId); });
 $("#main").addEventListener("dragend", e => { const c = e.target.closest(".card"); if (c) c.classList.remove("dragging"); dragId = null; $("#who").querySelectorAll(".drop").forEach(b=>b.classList.remove("drop")); });

@@ -216,6 +216,7 @@ def meta(curator: str = DEFAULT_CURATOR):
     check_curator(con, curator)
     genres = sorted({g for (gs,) in con.execute("SELECT genres FROM films") for g in gs.split(",") if g})
     decades = [r[0] for r in con.execute("SELECT DISTINCT decade FROM films ORDER BY decade")]
+    languages = [dict(r) for r in con.execute("SELECT language AS name, COUNT(*) AS n FROM films WHERE IFNULL(language,'')<>'' GROUP BY language ORDER BY n DESC")]
     scale = [dict(r) for r in con.execute("""SELECT sc.score, sc.name,
                (SELECT COUNT(*) FROM marks m WHERE m.score=sc.score AND m.curator=? AND m.status='seen') AS n
                FROM scale sc ORDER BY sc.score DESC""", (curator,))]
@@ -242,11 +243,11 @@ def meta(curator: str = DEFAULT_CURATOR):
         (SELECT COUNT(*) FROM films WHERE in_library=1) AS library
     """, {"c": curator}).fetchone())
     queues = {c["id"]: con.execute("SELECT COUNT(*) FROM queue WHERE curator=?", (c["id"],)).fetchone()[0] for c in curators(con)}
-    return {"curator": curator, "curators": curators(con), "genres": genres, "decades": decades,
+    return {"curator": curator, "curators": curators(con), "genres": genres, "decades": decades, "languages": languages,
             "scale": scale, "feelings": feelings, "tags": tags, "labels": labels, "stats": stats, "queues": queues}
 
 
-def where_clause(genre, decade, status, tier, tag, q, library, lst="", label="", feeling="", queue="", score=""):
+def where_clause(genre, decade, status, tier, tag, q, library, lst="", label="", feeling="", queue="", score="", lang=""):
     """queue = a curator id: only films in that person's to-write queue."""
     """Returns (join_sql, where_sql, args). The list join comes first, so its arg does too."""
     join, where, args = "", [], []
@@ -280,6 +281,8 @@ def where_clause(genre, decade, status, tier, tag, q, library, lst="", label="",
         where.append("EXISTS (SELECT 1 FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=f.tconst AND mt.tag=?)"); args.append(tag)
     if q:
         where.append("(f.title LIKE ? OR f.original_title LIKE ? OR f.directors LIKE ?)"); args += [f"%{q}%"] * 3
+    if lang:
+        where.append("f.language = ?"); args.append(lang)
     if library:
         where.append("f.in_library = 1")
     return join, ("WHERE " + " AND ".join(where)) if where else "", args
@@ -297,14 +300,14 @@ def film_query(curator, join, where, order, args, limit=None, offset=0):
 
 @app.get("/api/films")
 def films(curator: str = DEFAULT_CURATOR, genre: str = "", decade: int = 0, status: str = "", tier: str = "", score: str = "",
-          tag: str = "", label: str = "", feeling: str = "", queue: str = "", q: str = "", library: int = 0, lst: str = "",
+          tag: str = "", label: str = "", feeling: str = "", queue: str = "", q: str = "", library: int = 0, lst: str = "", lang: str = "",
           sort: str = "rating", offset: int = 0, limit: int = Query(60, le=500)):
     con = db()
     check_curator(con, curator)
     if queue in ("1", "me"):
         queue = curator
-    join, where, args = where_clause(genre, decade, status, tier, tag, q, library, lst, label, feeling, queue, score)
-    order = {"rating": "f.rating DESC, f.votes DESC", "votes": "f.votes DESC",
+    join, where, args = where_clause(genre, decade, status, tier, tag, q, library, lst, label, feeling, queue, score, lang)
+    order = {"rating": "((f.votes*f.rating + 25000*6.9)/(f.votes+25000.0)) DESC, f.votes DESC", "rating_raw": "f.rating DESC, f.votes DESC", "votes": "f.votes DESC",
              "year": "f.year DESC", "year_asc": "f.year ASC", "title": "f.title",
              "updated": "m.updated DESC", "random": "RANDOM()",
              "rt": "f.rt DESC NULLS LAST, f.rating DESC",
