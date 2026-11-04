@@ -114,7 +114,14 @@ Write for a person (for Paola), not for the machine; the machine reads it better
 **Lists in the repo.** `lists/*.csv` (Position, Name, Year) are loaded by `python lists.py all`; the file
 name is the list name. Today: AFI 100 (2007), Sight & Sound 2022 critics (full 250; 236 match), TSPDT 1000 (2025; 927 match),
 WGA 101 Screenplays (top 50), Metacritic Must-See (top 500; 453 match, the rest are documentaries,
-TV and shorts). To add one: paste the list page into a chat with Claude and ask for a `lists/` file, or drop a CSV in `lists/` (the Letterboxd snippet in `tools/`
+TV and shorts), Oscar Best Picture winners (1927–2024), Empire 50 funniest comedies, Empire 50 greatest sci-fi,
+Empire 60 best action (top 38), RT best horror (top 46 of 200).
+
+**Per-decade lists** are computed, not editorial: `python lists.py decades` builds "Horror · 1980s", "Sci-Fi · 2010s"…
+for Horror, Sci-Fi, Action, Comedy, Thriller, Drama and Animation, 1960s–2020s: the 40 best by weighted IMDb rating
+with at least 25 000 votes. Re-run it after a catalogue refresh.
+
+To add one: paste the list page into a chat with Claude and ask for a `lists/` file, or drop a CSV in `lists/` (the Letterboxd snippet in `tools/`
 makes one from any Letterboxd list page) and run `lists.py all` again.
 
 Lists show up as a filter ("IMDb Top 250 · seen 40/250 · avg 6.2"), as a sort ("by list rank"),
