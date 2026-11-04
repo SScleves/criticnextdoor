@@ -37,6 +37,7 @@ def norm(s):
     s = s.lower().replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     s = re.sub(r"\s*[:\-–—]\s*", " ", s)
     s = re.sub(r"[^\w\s]", "", s)
+    s = re.sub(r"colour", "color", s)   # British lists vs IMDb's US titles: Three Colours: Red == Three Colors: Red
     return re.sub(r"\s+", " ", s).strip()
 
 
@@ -54,7 +55,7 @@ class Resolver:
             self.by_year.setdefault(year, []).append((t, names))
 
     def __call__(self, title, year):
-        title = norm(title)
+        raw, title = title, norm(title)
         years = (year, year - 1, year + 1) if year else (None,)
         for y in years:
             c = self.by.get((title, y))
@@ -65,6 +66,13 @@ class Resolver:
                 for t, names in self.by_year.get(y, []):
                     if any(title in n for n in names):
                         return t
+        # the list carries a subtitle IMDb doesn't: 'Gett: The Trial of Viviane Amsalem', 'Gangs of Wasseypur – Part 1'
+        head = re.split(r"\s*(?::|\s[–—-]\s)\s*", raw, maxsplit=1)[0]
+        if head != raw and len(norm(head)) >= 4:
+            for y in years:
+                c = self.by.get((norm(head), y))
+                if c:
+                    return c[0]
         return None
 
 
