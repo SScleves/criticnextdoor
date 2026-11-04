@@ -131,7 +131,7 @@
   .wrow .wc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .wrow .wc input{flex:1;min-width:110px;padding:4px 8px;font-size:12px;border:1px dashed #4a4a55;border-radius:14px;background:var(--bg)}
   .wrow .chip{border-color:var(--k);background:var(--k);color:#111;font-weight:600} .wrow.neg .chip{color:#fff}
-  .wrow .chip::before{content:"" !important} .wrow .chip .ang{font-size:9px;opacity:.65;margin-left:4px;font-weight:400}
+  .wrow .chip::before{content:"" !important} .wrow .chip::after{content:" ×";opacity:.55} .wrow .chip:hover::after{opacity:1} .wrow .chip .ang{font-size:9px;opacity:.65;margin-left:4px;font-weight:400}
   .wrow .chip.auto{border-style:dashed;background:#6d4f80;color:#fff}
   .angles{display:flex;flex-wrap:wrap;gap:6px} .angles button{font-size:12px;padding:5px 10px;border-radius:6px;color:var(--mute)} .angles button.on{background:#2e2a1c;border-color:var(--acc);color:var(--fg);font-weight:600}
   .angles button i{font-style:normal;color:var(--acc);margin-left:4px} .angles button i.n{color:var(--neg)}
@@ -706,9 +706,12 @@ function openSheet(f, adv=false){
   if (location.hash !== "#film/"+f.tconst) history.replaceState(null, "", "#film/"+f.tconst);
   const sh = $("#sheet");
   sh.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+    const wasOn = b.classList.contains("on");   // click the lit one again: no status at all
     sh.querySelectorAll(".seg button").forEach(x=>x.classList.remove("on"));
-    b.classList.add("on"); sh.querySelectorAll(".seenonly").forEach(x => x.style.display = b.dataset.s==="seen" ? "" : "none");
-    if (b.dataset.s === "seen") $("#m-reached").focus();
+    if (!wasOn) b.classList.add("on");
+    const seen = !wasOn && b.dataset.s === "seen";
+    sh.querySelectorAll(".seenonly").forEach(x => x.style.display = seen ? "" : "none");
+    if (seen) $("#m-reached").focus();
     touch();
   });
   // words: tags and labels live in two maps; the column is re-rendered from them
