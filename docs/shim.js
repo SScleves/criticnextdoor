@@ -322,6 +322,17 @@
     return { curator: c, curators: curators(), genres, decades, languages, scale, feelings, tags, labels, stats, queues };
   }
 
+  const MISSING = {
+    score: "m.status='seen' AND m.score IS NULL",
+    feeling: "m.status='seen' AND NOT EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=f.tconst)",
+    reached: "m.status='seen' AND IFNULL(m.reached,'')=''",
+    note: `m.status='seen' AND NOT ${NOTED_SQL}`,
+    tags: "m.status='seen' AND NOT EXISTS (SELECT 1 FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=f.tconst)",
+    labels: "NOT EXISTS (SELECT 1 FROM film_labels fl WHERE fl.tconst=f.tconst)",
+    list: "NOT EXISTS (SELECT 1 FROM lists l WHERE l.tconst=f.tconst)",
+    writer: "NOT EXISTS (SELECT 1 FROM queue qq WHERE qq.tconst=f.tconst)",
+    poster: "f.poster IS NULL",
+  };
   function whereClause(p) {
     const g = k => p.get(k) || "";
     let join = ""; const where = [], args = [];
@@ -342,6 +353,7 @@
     if (g("tag")) { where.push("EXISTS (SELECT 1 FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=f.tconst AND mt.tag=?)"); args.push(g("tag")); }
     if (g("q")) { where.push("(f.title LIKE ? OR f.original_title LIKE ? OR f.directors LIKE ?)"); args.push(`%${g("q")}%`, `%${g("q")}%`, `%${g("q")}%`); }
     if (g("lang")) { where.push("f.language = ?"); args.push(g("lang")); }
+    for (const k of parts(g("missing"), ",")) if (MISSING[k]) where.push(`(${MISSING[k]})`);
     if (+g("library")) where.push("f.in_library = 1");
     return { join, where: where.length ? "WHERE " + where.join(" AND ") : "", args };
   }

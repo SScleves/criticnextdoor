@@ -174,6 +174,18 @@
     <select id="label"><option value="">all labels</option></select>
     <select id="decade"><option value="0">all decades</option></select>
     <select id="lang"><option value="">any language</option></select>
+    <select id="missing" title="what the film still lacks">
+      <option value="">missing…</option>
+      <option value="score">missing: score</option>
+      <option value="feeling">missing: end-feeling</option>
+      <option value="reached">missing: why it reached you</option>
+      <option value="note">missing: any note</option>
+      <option value="tags">missing: tags</option>
+      <option value="labels">missing: labels (what it is)</option>
+      <option value="writer">missing: who writes it</option>
+      <option value="list">not on any list</option>
+      <option value="poster">no poster</option>
+    </select>
     <select id="status">
       <option value="">any status</option>
       <option value="unmarked">unmarked</option>
@@ -263,7 +275,7 @@ async function loadMeta(){
 
 function params(){
   const p = new URLSearchParams();
-  for (const id of ["q","genre","label","decade","lang","status","score","feeling","tag","lst","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
+  for (const id of ["q","genre","label","decade","lang","missing","status","score","feeling","tag","lst","sort"]) { const v = $("#"+id).value; if (v && v!=="0") p.set(id, v); }
   if ($("#lib").checked) p.set("library", "1");
   if ($("#queue").checked) p.set("queue", "me");
   p.set("offset", state.offset); p.set("limit", 60);
@@ -284,7 +296,8 @@ async function load(reset=true){
 function marked(f){
   const st = $("#status").value;
   const gone = (st === "unmarked" && f.status) || (st === "seen_nonote" && hasNote(f)) || (st === "seen_notier" && f.score != null) || (st === "seen_nofeeling" && f.feelings)
-    || ($("#queue").checked && !(f.queued||"").split(",").includes(curator));
+    || ($("#queue").checked && !(f.queued||"").split(",").includes(curator))
+    || ({score: f.score != null, feeling: !!f.feelings, reached: !!(f.reached||"").trim(), note: hasNote(f), tags: !!f.tags, labels: !!f.labels, writer: !!f.queued}[$("#missing").value] === true);
   if (!f._marked && gone) { f._marked = true; state.offset = Math.max(0, state.offset - 1); }
 }
 const hasNote = f => ["about","reached","for_whom","avoid","note"].some(k => (f[k]||"").trim());
@@ -545,7 +558,7 @@ function renderProgress(){
     setMode("browse"); load();
   });
 }
-function clearFilters(){ for (const id of ["q","genre","label","lang","status","score","feeling","tag","lst"]) $("#"+id).value = ""; $("#decade").value = "0"; $("#lib").checked = false; $("#queue").checked = false; }
+function clearFilters(){ for (const id of ["q","genre","label","lang","missing","status","score","feeling","tag","lst"]) $("#"+id).value = ""; $("#decade").value = "0"; $("#lib").checked = false; $("#queue").checked = false; }
 
 // ---- tags & labels manager ---------------------------------------------------
 function renderTags(){
@@ -892,7 +905,7 @@ document.onkeydown = e => {
     const ci = "123456789".indexOf(e.key); if (ci >= 0 && META.curators[ci]) { e.preventDefault(); queueFromTriage(META.curators[ci].id); } }
   if (state.mode === "compare" && !state.picked) { const k = {ArrowLeft:"a",ArrowRight:"b",ArrowDown:"skip"}[e.key]; if (k) { e.preventDefault(); pick(k); } }
 };
-["genre","label","decade","lang","status","score","feeling","tag","lst","sort","lib","queue"].forEach(id => $("#"+id).onchange = () => state.mode === "foryou" ? loadForYou() : load());
+["genre","label","decade","lang","missing","status","score","feeling","tag","lst","sort","lib","queue"].forEach(id => $("#"+id).onchange = () => state.mode === "foryou" ? loadForYou() : load());
 
 // ---- who writes it: buttons in the write-up and triage, or drag a poster onto a name ----
 async function toggleQueue(f, who, on){
