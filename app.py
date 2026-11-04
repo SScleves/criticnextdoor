@@ -247,7 +247,20 @@ def meta(curator: str = DEFAULT_CURATOR):
             "scale": scale, "feelings": feelings, "tags": tags, "labels": labels, "stats": stats, "queues": queues}
 
 
-def where_clause(genre, decade, status, tier, tag, q, library, lst="", label="", feeling="", queue="", score="", lang=""):
+MISSING = {   # the "missing…" filter: what a seen film still lacks (the status filter only says seen/unmarked)
+    "score": "m.status='seen' AND m.score IS NULL",
+    "feeling": "m.status='seen' AND NOT EXISTS (SELECT 1 FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=f.tconst)",
+    "reached": "m.status='seen' AND IFNULL(m.reached,'')=''",
+    "note": f"m.status='seen' AND NOT {NOTED_SQL}",
+    "tags": "m.status='seen' AND NOT EXISTS (SELECT 1 FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=f.tconst)",
+    "labels": "NOT EXISTS (SELECT 1 FROM film_labels fl WHERE fl.tconst=f.tconst)",
+    "list": "NOT EXISTS (SELECT 1 FROM lists l WHERE l.tconst=f.tconst)",
+    "writer": "NOT EXISTS (SELECT 1 FROM queue qq WHERE qq.tconst=f.tconst)",
+    "poster": "f.poster IS NULL",
+}
+
+
+def where_clause(genre, decade, status, tier, tag, q, library, lst="", label="", feeling="", queue="", score="", lang="", missing=""):
     """queue = a curator id: only films in that person's to-write queue."""
     """Returns (join_sql, where_sql, args). The list join comes first, so its arg does too."""
     join, where, args = "", [], []
@@ -283,6 +296,9 @@ def where_clause(genre, decade, status, tier, tag, q, library, lst="", label="",
         where.append("(f.title LIKE ? OR f.original_title LIKE ? OR f.directors LIKE ?)"); args += [f"%{q}%"] * 3
     if lang:
         where.append("f.language = ?"); args.append(lang)
+    for k in parts(missing, ","):
+        if k in MISSING:
+            where.append(f"({MISSING[k]})")
     if library:
         where.append("f.in_library = 1")
     return join, ("WHERE " + " AND ".join(where)) if where else "", args
@@ -301,12 +317,12 @@ def film_query(curator, join, where, order, args, limit=None, offset=0):
 @app.get("/api/films")
 def films(curator: str = DEFAULT_CURATOR, genre: str = "", decade: int = 0, status: str = "", tier: str = "", score: str = "",
           tag: str = "", label: str = "", feeling: str = "", queue: str = "", q: str = "", library: int = 0, lst: str = "", lang: str = "",
-          sort: str = "rating", offset: int = 0, limit: int = Query(60, le=500)):
+          missing: str = "", sort: str = "rating", offset: int = 0, limit: int = Query(60, le=500)):
     con = db()
     check_curator(con, curator)
     if queue in ("1", "me"):
         queue = curator
-    join, where, args = where_clause(genre, decade, status, tier, tag, q, library, lst, label, feeling, queue, score, lang)
+    join, where, args = where_clause(genre, decade, status, tier, tag, q, library, lst, label, feeling, queue, score, lang, missing)
     order = {"rating": "((f.votes*f.rating + 25000*6.9)/(f.votes+25000.0)) DESC, f.votes DESC", "rating_raw": "f.rating DESC, f.votes DESC", "votes": "f.votes DESC",
              "year": "f.year DESC", "year_asc": "f.year ASC", "title": "f.title",
              "updated": "m.updated DESC", "random": "RANDOM()",
