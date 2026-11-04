@@ -34,10 +34,17 @@ def connect():
 
 def norm(s):
     """Lower-case, straight quotes, no punctuation: 'Schindler’s List' == \"Schindler's List\"."""
+    s = re.sub(r"\s*\[\d{4}\]\s*$", "", s)                        # 'Psycho [1960]' (TSPDT)
+    m = re.match(r"^(.*), (the|a|an|la|le|les|l'|il|el|los|las|der|die|das|un|une)$", s, re.I)
+    if m:                                                            # 'Godfather, The' / "Atalante, L'" (library order)
+        art = m.group(2); s = (art + ("" if art.endswith("'") else " ") + m.group(1))
     s = s.lower().replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     s = re.sub(r"\s*[:\-–—]\s*", " ", s)
     s = re.sub(r"[^\w\s]", "", s)
-    s = re.sub(r"colour", "color", s)   # British lists vs IMDb's US titles: Three Colours: Red == Three Colors: Red
+    s = re.sub(r"colour", "color", s)
+    s = re.sub(r"\bneighbour", "neighbor", s)
+    s = s.replace("sunset blvd", "sunset boulevard").replace("cleo from 5 to 7", "cleo de 5 a 7")
+    s = re.sub(r"^ali fear eats the soul$", "fear eats the soul", s)   # British lists vs IMDb's US titles: Three Colours: Red == Three Colors: Red
     return re.sub(r"\s+", " ", s).strip()
 
 
