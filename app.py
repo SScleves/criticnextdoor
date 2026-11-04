@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
-from setup import migrate, DEFAULT_CURATOR
+from setup import migrate, DEFAULT_CURATOR, GUILTY_TAGS
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DB = os.environ.get("FILMCAT_DB", os.path.join(HERE, "films.db"))
@@ -31,7 +31,7 @@ FILM_COLS = ("f.tconst,f.title,f.year,f.decade,f.runtime,f.genres,f.rating,f.vot
              " FROM marks mm WHERE mm.tconst=f.tconst) AS all_marks,"
              "(SELECT group_concat(qq.curator, ',') FROM queue qq WHERE qq.tconst=f.tconst) AS queued")
 # the current curator's mark. `tags` is rebuilt as the old comma string so the page and exports stay simple
-MY_COLS = ("m.curator,m.status,m.score,(SELECT sc.name FROM scale sc WHERE sc.score=m.score) AS tier,m.rank,"
+MY_COLS = ("m.curator,m.status,m.score,(SELECT sc.name FROM scale sc WHERE sc.score=m.score) AS tier,m.rank,m.favourite,m.guilty,"
            "m.times,m.when_seen,m.memory,m.about,m.reached,m.for_whom,m.avoid,m.note,m.source,m.updated,"
            "(SELECT group_concat(CASE WHEN mt.polarity<0 THEN '-'||mt.tag ELSE mt.tag END, ',') FROM mark_tags mt"
            " WHERE mt.curator=m.curator AND mt.tconst=m.tconst) AS tags,"
@@ -114,6 +114,8 @@ def notes_md(con, curator):
         sc = d["score"]
         line = [f"score: {sc:+d}" + (f" ({names[sc]})" if names.get(sc) != f"{sc:+d}" else "") if sc is not None else "score: none yet"]
         if d["rank"]: line.append(f"rank at that score: {d['rank']}")
+        if d["favourite"]: line.append("♥ one of my favourites")
+        if d["guilty"]: line.append(f"🍿 guilty pleasure ({d['guilty']})")
         if d["directors"]: line.append(f"director: {d['directors']}")
         if d["genres"]: line.append(f"imdb genres: {d['genres']}")
         if d["labels"]: line.append("labels: " + ", ".join(d["labels"]))
@@ -134,7 +136,7 @@ def notes_md(con, curator):
 
 
 CSV_COLS = ["curator", "tconst", "title", "year", "directors", "genres", "labels", "countries", "language", "runtime",
-            "rating", "rt", "metacritic", "lists", "status", "score", "tier", "rank", "feelings", "tags_pos", "tags_neg",
+            "rating", "rt", "metacritic", "lists", "status", "score", "tier", "rank", "favourite", "guilty", "feelings", "tags_pos", "tags_neg",
             "times", "when_seen", "memory", "about", "reached", "for_whom", "avoid", "note",
             "source", "updated", "in_library", "keywords", "overview"]
 
@@ -243,7 +245,7 @@ def meta(curator: str = DEFAULT_CURATOR):
         (SELECT COUNT(*) FROM films WHERE in_library=1) AS library
     """, {"c": curator}).fetchone())
     queues = {c["id"]: con.execute("SELECT COUNT(*) FROM queue WHERE curator=?", (c["id"],)).fetchone()[0] for c in curators(con)}
-    return {"curator": curator, "curators": curators(con), "genres": genres, "decades": decades, "languages": languages,
+    return {"curator": curator, "curators": curators(con), "genres": genres, "decades": decades, "languages": languages, "guilty_tags": GUILTY_TAGS,
             "scale": scale, "feelings": feelings, "tags": tags, "labels": labels, "stats": stats, "queues": queues}
 
 
@@ -438,6 +440,8 @@ class Mark(BaseModel):
     score: int | None = None          # -10..10
     tier: str | None = None           # old clients: a scale name; ignored when score is given
     feelings: list[str] = []          # "wrecked:3", at most two
+    favourite: bool = False           # ♥ one of mine; any score
+    guilty: str | None = None         # 🍿 guilty pleasure, with its tag (GUILTY_TAGS)
     tags: list[str] = []              # "tag" = why it worked, "-tag" = what went wrong
     labels: list[str] | None = None   # film labels (shared between curators); None = leave as they are
     about: str | None = None
@@ -463,16 +467,18 @@ def mark(m: Mark):
         raise HTTPException(400, "score must be between -10 and 10")
     if len(m.feelings) > 2:
         raise HTTPException(400, "two end-feelings at most: pick the ones that stayed")
+    if m.guilty and m.guilty not in GUILTY_TAGS:
+        raise HTTPException(400, "guilty pleasure needs one of: " + ", ".join(GUILTY_TAGS))
     old = con.execute("SELECT score FROM marks WHERE curator=? AND tconst=?", (m.curator, m.tconst)).fetchone()
     keep_rank = bool(old and old["score"] == score)   # a score change drops the film out of its old ladder
-    con.execute(f"""INSERT INTO marks (curator,tconst,status,score,tier,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
-                   VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,?,?,'me',datetime('now'))
+    con.execute(f"""INSERT INTO marks (curator,tconst,status,score,tier,rank,favourite,guilty,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
+                   VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,?,?,?,?,'me',datetime('now'))
                    ON CONFLICT(curator,tconst) DO UPDATE SET status=excluded.status, score=excluded.score, tier=NULL,
-                   rank={"rank" if keep_rank else "NULL"},
+                   rank={"rank" if keep_rank else "NULL"}, favourite=excluded.favourite, guilty=excluded.guilty,
                    times=excluded.times, when_seen=excluded.when_seen, memory=excluded.memory,
                    about=excluded.about, reached=excluded.reached, for_whom=excluded.for_whom, avoid=excluded.avoid,
                    note=excluded.note, source='me', updated=datetime('now')""",
-                (m.curator, m.tconst, m.status, score, m.times, m.when_seen, m.memory,
+                (m.curator, m.tconst, m.status, score, 1 if m.favourite else 0, m.guilty or None, m.times, m.when_seen, m.memory,
                  m.about, m.reached, m.for_whom, m.avoid, m.note))
     con.execute("DELETE FROM mark_feelings WHERE curator=? AND tconst=?", (m.curator, m.tconst))
     for fe in m.feelings:

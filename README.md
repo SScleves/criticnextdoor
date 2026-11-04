@@ -72,10 +72,13 @@ through the films of the current filter. It saves itself as you type ("saved" bo
 right); `Esc` or `Ctrl+Enter` closes it (and moves on, in triage). Keys `1`–`9` `0` `-` `=`
 pick the tier when you're not in a text field; `/` jumps to the new-tag box.
 
-- status (seen / want / not seen) · **score** on a −10…+10 scale (`=` up, `-` down when not
-  typing). Any step can carry a name: type it next to the number, or on the **words** page.
-  Names are labels on numbers, so renaming never touches a film. The old tiers are the seeds
-  (+10 my favourite … −10 the worst shit ever); the other steps start unnamed.
+- status (seen / want / not seen; click the lit one again to clear it) · **score** on a −10…+10
+  scale: the label is the hero ("Great. Again tonight."), the number is under it; slide, `−`/`+`,
+  or "see all 21" and pick. Every number has a line (`SCALE_NAMES` in `setup.py`; edit them on the
+  **words** page). Sign is the feeling: negative = wasted my time, 0 = nothing happened, positive
+  = worth it; −5 is the one that's an action ("Trick your enemies into watching it").
+- **♥ Favourite** and **🍿 Guilty pleasure** (with one tag: cheesy / nostalgia / so-bad-its-good /
+  comfort / the-one-scene) are flags beside the score; they never change it. Cards show them.
 - **end-feeling**: what it left you with when it ended, one or two from a fixed list
   (wrecked, unsettled, hollow, shaken, warm, giddy, cosy, moved, wired, satisfied, puzzled,
   cheated, numb, annoyed, delighted-by-the-mess), each at 1–3. The visitor's first question in

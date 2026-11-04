@@ -19,7 +19,7 @@ from setup import migrate
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = os.environ.get("FILMCAT_STATE_DIR", os.path.join(HERE, "state"))
 REPO = os.environ.get("FILMCAT_STATE_REPO", "git@github.com:SScleves/criticnextdoor-state.git")
-MARK_COLS = ["curator", "tconst", "status", "score", "tier", "rank", "times", "when_seen", "memory", "about", "reached", "for_whom", "avoid", "note", "source", "updated"]
+MARK_COLS = ["curator", "tconst", "status", "score", "tier", "rank", "favourite", "guilty", "times", "when_seen", "memory", "about", "reached", "for_whom", "avoid", "note", "source", "updated"]
 STATE_V = 2   # v2 adds marks.score, marks.feelings, pairs.reason, queue, scale, feelings
 now = lambda: time.strftime("%Y-%m-%d %H:%M:%S")
 
