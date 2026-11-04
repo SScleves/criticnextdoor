@@ -109,8 +109,7 @@ Write for a person (for Paola), not for the machine; the machine reads it better
 ```
 
 **Lists in the repo.** `lists/*.csv` (Position, Name, Year) are loaded by `python lists.py all`; the file
-name is the list name. Today: AFI 100 (2007), Sight & Sound 2022 critics (top 50; *Man with a Movie
-Camera* and *Meshes of the Afternoon* are a documentary and a short, which the catalogue doesn't hold),
+name is the list name. Today: AFI 100 (2007), Sight & Sound 2022 critics (full 250; 236 match), TSPDT 1000 (2025; 927 match),
 WGA 101 Screenplays (top 50), Metacritic Must-See (top 500; 453 match, the rest are documentaries,
 TV and shorts). To add one: paste the list page into a chat with Claude and ask for a `lists/` file, or drop a CSV in `lists/` (the Letterboxd snippet in `tools/`
 makes one from any Letterboxd list page) and run `lists.py all` again.
