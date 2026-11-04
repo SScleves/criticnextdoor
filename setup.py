@@ -107,7 +107,7 @@ MIGRATIONS = {
     "films": ["directors TEXT", "writers TEXT", "in_library INTEGER DEFAULT 0", "added TEXT",
               "rt INTEGER", "metacritic INTEGER", "omdb_checked INTEGER DEFAULT 0"],
     "pairs": ["curator TEXT", "reason TEXT"],
-    "marks": ["score INTEGER"],
+    "marks": ["score INTEGER", "favourite INTEGER DEFAULT 0", "guilty TEXT"],
     "film_labels": ["source TEXT DEFAULT 'me'"],
     "events": ["curator TEXT"],
 }
@@ -142,6 +142,17 @@ FEELINGS = [  # (name, group, spanish). The visitor's first question is "what di
     ("cheated", "let down", "estafado"), ("numb", "let down", "indiferente"), ("annoyed", "let down", "irritado"),
     ("delighted-by-the-mess", "fun-bad", "encantado con el desastre"),
 ]
+
+SCALE_NAMES = {  # the voice of the product: one line per number. Editable in the app; these are the defaults
+    10: "Wish I could unsee it, to see it again", 9: "What did I just watch. Insane.", 8: "Amazing. Won't shut up about it.",
+    7: "Great. Again tonight.", 6: "Really good. Trust me.", 5: "Good. You'll have a nice time.", 4: "Yeah, it's good.",
+    3: "Decent. Fine for a Tuesday.", 2: "It's fine. Nothing to say.", 1: "It's ok. Don't bother.",
+    0: "Average. Gone by the weekend.",
+    -1: "Meh. Should've picked another.", -2: "Checked how long was left.", -3: "Almost turned it off.", -4: "Turned it off.",
+    -5: "Trick your enemies into watching it 😈", -6: "Don't let a friend watch this.", -7: "Painful. Everything's wrong.",
+    -8: "Awful. Hard to think of worse.", -9: "Some of the worst shit ever.", -10: "The worst shit ever. All wasted.",
+}
+GUILTY_TAGS = ["cheesy", "nostalgia", "so-bad-its-good", "comfort", "the-one-scene"]
 
 CURATORS = [("santi", "Santi", 1), ("paola", "Paola", 2)]
 DEFAULT_CURATOR = "santi"
@@ -187,8 +198,11 @@ def migrate(con):
     con.executemany("INSERT OR IGNORE INTO curators VALUES (?,?,?)", CURATORS)
     con.executemany("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", FEELINGS)
     con.executemany("INSERT OR IGNORE INTO labels VALUES (?,?)", LABELS)
-    names = {score: name for name, score, _ in TIERS}
-    con.executemany("INSERT OR IGNORE INTO scale VALUES (?,?)", [(sc, names.get(sc, "")) for sc in range(10, -11, -1)])
+    con.executemany("INSERT OR IGNORE INTO scale VALUES (?,?)", [(sc, SCALE_NAMES[sc]) for sc in range(10, -11, -1)])
+    # a scale seeded before the labels existed still carries the old tier names or blanks: give it the labels
+    old = {score: name for name, score, _ in TIERS}
+    for sc, name in SCALE_NAMES.items():
+        con.execute("UPDATE scale SET name=? WHERE score=? AND (name='' OR name IS NULL OR name=?)", (name, sc, old.get(sc, "")))
     # marks written before the scale: score from the tier name
     con.execute("UPDATE marks SET score=(SELECT t.score FROM tiers t WHERE t.name=marks.tier) WHERE score IS NULL AND tier IS NOT NULL")
     migrate_to_curators(con)

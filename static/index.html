@@ -89,7 +89,7 @@
   .ov{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;z-index:10;overflow:auto;padding:14px}
   .ov.open{display:block}
   .sheet{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(1360px,100%);margin:0 auto;min-height:calc(100vh - 28px);display:grid;grid-template-rows:1fr auto}
-  .cols{display:grid;grid-template-columns:230px minmax(0,1fr) 320px;gap:0}
+  .cols{display:grid;grid-template-columns:300px minmax(0,1fr) 320px;gap:0}
   .col{padding:18px;min-width:0} .col+.col{border-left:1px solid var(--line)}
   @media(max-width:1000px){.cols{grid-template-columns:200px 1fr} .col.right{grid-column:1/-1;border-left:none;border-top:1px solid var(--line)}}
   @media(max-width:640px){.cols{grid-template-columns:1fr} .col+.col{border-left:none;border-top:1px solid var(--line)}}
@@ -111,6 +111,24 @@
   .chip.lab.auto.on{border-style:dashed;background:#6d4f80;color:#fff}
   .chip.feel{border-color:#4a4a55} .chip.feel.on{background:#3a6b8f;border-color:#3a6b8f;color:#fff;font-weight:600} .chip.feel.on::before{content:""}
   .chip.feel.i1{background:#2b4a60} .chip.feel.i3{background:#5a9ad0;color:#111} .chip.feel .es{color:var(--mute);font-size:10px;margin-left:3px} .chip.feel.on .es{color:inherit;opacity:.8}
+  .rate{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+  .rate .top{display:flex;align-items:center;gap:8px} .rate .top button{width:40px;height:40px;border-radius:10px;font-size:20px;flex:none}
+  .rate .hero{flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;text-align:center}
+  .rate .hero .n{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1} .rate .hero .l{font-size:14px;font-weight:700;line-height:1.2;text-wrap:balance}
+  .rate .hero .z{font-size:10px;text-transform:uppercase;letter-spacing:.6px} .rate .hero.none .l{color:var(--mute);font-weight:400}
+  .rate input[type=range]{width:100%;margin:0;accent-color:#fff;height:26px;border-radius:8px;background:linear-gradient(90deg,#3b4b5c 0%,#4a5560 23%,#5f6670 45%,#6b6b73 50%,#7a7266 52%,#a98447 66%,#d9913f 80%,#ff7a3d 100%);border:1px solid var(--line);-webkit-appearance:none;appearance:none}
+  .rate input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:30px;border-radius:8px;background:#fff;border:3px solid var(--rc,#e5b53d);box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer}
+  .rate input[type=range]::-moz-range-thumb{width:22px;height:30px;border-radius:8px;background:#fff;border:3px solid var(--rc,#e5b53d);cursor:pointer}
+  .rate .zones{display:flex;justify-content:space-between;font-size:9px;color:var(--mute);text-transform:uppercase;letter-spacing:.4px}
+  .rate .all{align-self:center;font-size:11px;padding:3px 10px;border-radius:12px;color:var(--mute);background:transparent}
+  .rate .list{display:flex;flex-direction:column;max-height:260px;overflow:auto;border-top:1px solid var(--line);padding-top:4px}
+  .rate .list button{display:flex;gap:10px;align-items:center;text-align:left;padding:5px 8px;border:none;background:transparent;border-radius:6px;color:var(--mute);font-size:12px}
+  .rate .list button:hover{background:var(--panel2);color:var(--fg)} .rate .list button.on{background:var(--panel2);color:var(--fg);font-weight:600}
+  .rate .list button i{font-style:normal;width:28px;text-align:right;font-variant-numeric:tabular-nums;flex:none} .rate .list button.devil{color:#e5664f}
+  .flags{display:flex;gap:6px} .flags button{flex:1;padding:8px 6px;border-radius:10px;font-size:12px;font-weight:600;color:var(--mute)}
+  .flags button.on{border-color:var(--acc);background:#2e2a1c;color:var(--fg)}
+  .gtags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px} .gtags .chip.on{background:#6b5a2a;border-color:#a98447;color:#fff} .gtags .chip.on::before{content:""}
+  .badge2{position:absolute;top:30px;left:6px;z-index:1;display:flex;gap:3px} .badge2 span{font-size:11px;background:rgba(0,0,0,.75);padding:1px 5px;border-radius:9px}
   .scale{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
   .scale button{padding:4px 5px;font-size:12px;font-variant-numeric:tabular-nums;border-radius:6px;line-height:1.2;min-width:0;text-align:left;display:flex;gap:4px;align-items:baseline}
   .scale button small{font-size:10px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -246,6 +264,8 @@ const otherMarks = f => (f.all_marks||"").split("|").filter(Boolean).map(x=>x.sp
 const signed = n => (n > 0 ? "+" : "") + n;
 const scaleName = sc => { const x = META.scale.find(s=>s.score===+sc); return x && x.name ? x.name : signed(+sc); };   // name if there is one, else the number
 const scaleLabel = sc => sc === "" || sc == null ? "" : (scaleName(sc) === signed(+sc) ? signed(+sc) : `${signed(+sc)} ${scaleName(sc)}`);
+const ZONE = sc => sc == null ? ["", "#8d8a84"] : sc <= -6 ? ["warn", "#6b8aa8"] : sc <= -1 ? ["don't bother", "#8d9aa8"] : sc === 0 ? ["nothing", "#9a9088"] : sc <= 3 ? ["fine", "#b89b55"] : sc <= 6 ? ["recommend", "#d9913f"] : ["must watch", "#ff7a3d"];
+const chipText = f => (f.score != null ? scaleLabel(f.score) : "") + (f.favourite ? " ♥" : "") + (f.guilty ? " 🍿" : "");
 const GUIDE = {reached: 400, about: 160, for_whom: 160, avoid: 160, note: 600};   // soft limits: a note, not an essay
 
 // ---- meta, header -----------------------------------------------------------
@@ -325,12 +345,13 @@ const listsLine = f => f.lists ? `<div class="d" title="${esc(f.lists.replace(/\
 function card(f){
   const poster = f.poster ? `<img loading="lazy" src="${IMG}${f.poster}" alt="">` : `<span>${esc(f.title)}<br><small>${f.year}</small></span>`;
   const badge = f.status ? `<span class="badge ${f.status}">${f.status==="want"?"want":f.status==="not"?"not seen":"seen"}</span>` : "";
-  const tier = f.score != null ? `<span class="tier" title="${esc(scaleLabel(f.score))}">${esc(scaleLabel(f.score))}</span>` : "";
+  const tier = f.score != null ? `<span class="tier" style="color:${ZONE(f.score)[1]}" title="${esc(scaleLabel(f.score))}">${esc(scaleLabel(f.score))}</span>` : "";
+  const flags = (f.favourite || f.guilty) ? `<div class="badge2">${f.favourite?`<span title="one of mine">♥</span>`:""}${f.guilty?`<span title="guilty pleasure: ${esc(f.guilty)}">🍿</span>`:""}</div>` : "";
   const oth = otherMarks(f);
   const others = oth.length ? `<div class="others">${oth.map(([c,s,sc])=>`<span class="c-${c}" title="${esc(curName(c))}: ${s}${sc!==""?", "+esc(scaleLabel(sc)):""}">${esc(curName(c)[0])}: ${sc !== "" ? esc(scaleLabel(sc)) : s}</span>`).join("")}</div>` : "";
   const qs = (f.queued||"").split(",").filter(Boolean);
   const qb = qs.length ? `<div class="qbadge">${qs.map(c=>`<span class="c-${c}" title="${esc(curName(c))} writes this">${esc(curName(c))} ✎</span>`).join("")}</div>` : "";
-  return `<div class="card" data-id="${f.tconst}" draggable="true">${badge}${tier}<div class="poster">${poster}${others}${qb}</div>
+  return `<div class="card" data-id="${f.tconst}" draggable="true">${badge}${tier}${flags}<div class="poster">${poster}${others}${qb}</div>
     <div class="cap"><div class="t">${esc(f.title)}</div>
     <div class="s">${f.year} · ★ ${f.rating}${f.rt!=null?` · 🍅 ${f.rt}`:""} · ${f.runtime||"?"} min${f.in_library?' · <span class="lib" title="in your library">●</span>':''}</div>
     <div class="d">${esc(f.directors||"")}</div>${f.labels?`<div class="d" style="color:var(--p)">${esc(f.labels.replace(/,/g," · "))}</div>`:""}${listsLine(f)}</div></div>`;
@@ -656,9 +677,21 @@ function openSheet(f, adv=false){
           <button class="not ${f.status==="not"?"on":""}" data-s="not">not seen</button>
         </div></div>
       <div class="seenonly" style="${f.status==="seen"?"":"display:none"}">
-        <div class="row"><label>score <small>· +10 best, −10 worst · keys <kbd>=</kbd> up <kbd>-</kbd> down when not typing</small></label>
-          <div class="scale" id="m-scale">${scaleBtns}</div>
-          <div class="scale-name" id="m-scalename" ${f.score==null?"hidden":""}><span>${f.score!=null?signed(f.score):""} =</span><input type="text" id="m-scaleinput" placeholder="name this step (optional)" value="${f.score!=null?esc(scaleName(f.score)===signed(f.score)?"":scaleName(f.score)):""}"></div>
+        <div class="row"><label>score <small>· slide, <kbd>−</kbd>/<kbd>+</kbd>, or pick from the list · keys <kbd>=</kbd> <kbd>-</kbd></small></label>
+          <div class="rate" id="m-scale">
+            <div class="top"><button type="button" data-step="-1" aria-label="one lower">−</button>
+              <div class="hero ${f.score==null?"none":""}" id="r-hero"><div class="n">${f.score!=null?signed(f.score):""}</div><div class="l">${f.score!=null?esc(scaleName(f.score)):"no score yet"}</div><div class="z">${ZONE(f.score)[0]}</div></div>
+              <button type="button" data-step="1" aria-label="one higher">+</button></div>
+            <input type="range" id="r-range" min="-10" max="10" step="1" value="${f.score!=null?f.score:0}" aria-label="score">
+            <div class="zones"><span>−10 warn</span><span>don't bother</span><span>0</span><span>fine</span><span>recommend</span><span>must watch +10</span></div>
+            <button type="button" class="all" id="r-all">see all 21 ▾</button>
+            <div class="list" id="r-list" hidden>${META.scale.map(t=>`<button type="button" data-pick="${t.score}" class="${f.score===t.score?"on":""} ${t.score===-5?"devil":""}"><i>${signed(t.score)}</i><span>${esc(t.name||"")}</span></button>`).join("")}</div>
+          </div>
+          <div class="flags" style="margin-top:8px">
+            <button type="button" id="r-fav" class="${f.favourite?"on":""}" aria-pressed="${f.favourite?"true":"false"}"><span style="color:var(--acc)">♥</span> Favourite <small style="font-weight:400;color:var(--mute)">one of mine</small></button>
+            <button type="button" id="r-guilty" class="${f.guilty?"on":""}" aria-pressed="${f.guilty?"true":"false"}">🍿 Guilty pleasure</button>
+          </div>
+          <div class="gtags" id="r-gtags" ${f.guilty?"":"hidden"}>${META.guilty_tags.map(t=>`<span class="chip ${f.guilty===t?"on":""}" data-g="${t}">${t}</span>`).join("")}</div>
           ${f.rank?`<div class="meta" style="margin-top:4px">#${f.rank} in its ladder</div>`:""}</div>
         <div class="row"><label>end-feeling <small>· what it left you with when it ended · two at most</small></label>
           <div class="chips" id="feelchips">${feelChips}</div></div>
@@ -718,12 +751,20 @@ function openSheet(f, adv=false){
   all.forEach(t => { if (t.startsWith("-")) W.tags[t.slice(1)] = -1; else W.tags[t] = 1; });
   const horror = /Horror|Thriller/.test(f.genres||"");
   W.angle = Object.keys(W.tags).length ? (META.tags.find(t=>W.tags[t.name])||{}).grp : (horror ? "fear" : "theme");
+  curScore = f.score != null ? f.score : null; setScore(curScore);
   renderWords();
   $("#qbtns").onclick = async e => { const b = e.target.closest("[data-q]"); if (!b) return;
     const on = !b.classList.contains("on"); await toggleQueue(f, b.dataset.q, on); b.classList.toggle("on", on); };
-  $("#m-scale").onclick = e => { const b = e.target.closest("[data-score]"); if (!b) return; setScore(b.classList.contains("on") ? null : +b.dataset.score); touch(); };
-  $("#m-scaleinput").onchange = async e => { const sc = currentScore(); if (sc == null) return; await api("/api/scale", {score: sc, name: e.target.value}); await loadMeta();
-    $("#m-scale").querySelector(`[data-score="${sc}"] small`).textContent = e.target.value.trim(); };
+  $("#m-scale").onclick = e => {
+    const st = e.target.closest("[data-step]"); if (st) { const cur = currentScore(); setScore(cur == null ? (+st.dataset.step > 0 ? 6 : 0) : Math.max(-10, Math.min(10, cur + +st.dataset.step))); touch(); return; }
+    const pk = e.target.closest("[data-pick]"); if (pk) { setScore(+pk.dataset.pick); touch(); return; }
+    if (e.target.id === "r-all") { const l = $("#r-list"); l.hidden = !l.hidden; e.target.textContent = l.hidden ? "see all 21 ▾" : "hide ▴"; if (!l.hidden) l.querySelector(".on")?.scrollIntoView({block:"center"}); }
+  };
+  $("#r-range").oninput = e => { setScore(+e.target.value); touch(); };
+  $("#r-fav").onclick = e => { const b = e.currentTarget; b.classList.toggle("on"); b.setAttribute("aria-pressed", b.classList.contains("on")); touch(); };
+  $("#r-guilty").onclick = e => { const b = e.currentTarget, on = !b.classList.contains("on"); b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
+    $("#r-gtags").hidden = !on; if (!on) $("#r-gtags").querySelectorAll(".chip").forEach(c=>c.classList.remove("on")); else if (!$("#r-gtags .chip.on")) $("#r-gtags .chip").classList.add("on"); touch(); };
+  $("#r-gtags").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; $("#r-gtags").querySelectorAll(".chip").forEach(x=>x.classList.toggle("on", x===c)); touch(); };
   $("#feelchips").onclick = e => { const c = e.target.closest(".chip"); if (!c) return;
     const i = +c.dataset.i, next = i === 0 ? 2 : i === 2 ? 3 : i === 3 ? 1 : 0;
     if (next && !i && $("#feelchips").querySelectorAll(".chip.on").length >= 2) { flash(c, "two at most: turn one off first"); return; }
@@ -740,11 +781,16 @@ function openSheet(f, adv=false){
   if (f.status === "seen" || adv) loadSuggestions(f);
 }
 
-function currentScore(){ const b = $("#m-scale")?.querySelector(".on"); return b ? +b.dataset.score : null; }
+let curScore = null;
+function currentScore(){ return curScore; }
 function setScore(sc){
-  $("#m-scale").querySelectorAll("button").forEach(b => b.classList.toggle("on", sc != null && +b.dataset.score === sc));
-  const nm = $("#m-scalename"); nm.hidden = sc == null;
-  if (sc != null) { nm.querySelector("span").textContent = signed(sc) + " ="; const n = scaleName(sc); $("#m-scaleinput").value = n === signed(sc) ? "" : n; }
+  curScore = sc;
+  const h = $("#r-hero"); if (!h) return;
+  h.classList.toggle("none", sc == null);
+  h.querySelector(".n").textContent = sc != null ? signed(sc) : ""; h.querySelector(".l").textContent = sc != null ? scaleName(sc) : "no score yet"; h.querySelector(".z").textContent = ZONE(sc)[0];
+  h.querySelector(".n").style.color = h.querySelector(".z").style.color = ZONE(sc)[1];
+  $("#r-range").value = sc != null ? sc : 0; $("#r-range").style.setProperty("--rc", ZONE(sc)[1]);
+  $("#r-list").querySelectorAll("[data-pick]").forEach(b => b.classList.toggle("on", sc != null && +b.dataset.pick === sc));
 }
 function flash(el, msg){ const t = el.title; el.title = msg; el.style.outline = "2px solid var(--neg)"; setTimeout(() => { el.style.outline = ""; el.title = t; }, 1200); }
 
@@ -827,6 +873,8 @@ function body(){
   const v = id => (sh.querySelector("#m-"+id)?.value || "").trim() || null;
   return { tconst: f.tconst, status,
     score: seen ? currentScore() : null,
+    favourite: seen ? $("#r-fav").classList.contains("on") : false,
+    guilty: seen && $("#r-guilty").classList.contains("on") ? ($("#r-gtags .chip.on")?.dataset.g || META.guilty_tags[0]) : null,
     feelings: seen ? [...sh.querySelectorAll("#feelchips .chip.on")].map(c=>`${c.dataset.feel}:${c.dataset.i}`) : [],
     tags: seen ? Object.entries(W.tags).map(([t,p]) => (p < 0 ? "-" : "") + t) : [],
     labels: [...W.labels],
@@ -897,7 +945,7 @@ document.onkeydown = e => {
     if ((e.ctrlKey || e.metaKey) && e.key === "ArrowLeft") { e.preventDefault(); step(-1); return; }
     if (!typing || tag === "SELECT") {
       if (e.key === "/") { e.preventDefault(); $("#add-pos")?.focus(); return; }
-      if ((e.key === "=" || e.key === "+" || e.key === "-") && $("#m-scale") && $("#sheet").querySelector(".seg button.on")?.dataset.s === "seen" && e.target.id !== "m-scaleinput") {
+      if ((e.key === "=" || e.key === "+" || e.key === "-") && $("#m-scale") && $("#sheet").querySelector(".seg button.on")?.dataset.s === "seen" ) {
         e.preventDefault(); const cur = currentScore(), d = e.key === "-" ? -1 : 1;
         setScore(cur == null ? (d > 0 ? 6 : 0) : Math.max(-10, Math.min(10, cur + d))); touch(); }
     }

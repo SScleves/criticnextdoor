@@ -26,13 +26,13 @@
     "(SELECT group_concat(fl.label, ',') FROM film_labels fl WHERE fl.tconst=f.tconst AND fl.source='auto') AS labels_auto," +
     "(SELECT group_concat(mm.curator || ':' || IFNULL(mm.status,'') || ':' || IFNULL(mm.score,''), '|') FROM marks mm WHERE mm.tconst=f.tconst) AS all_marks," +
     "(SELECT group_concat(qq.curator, ',') FROM queue qq WHERE qq.tconst=f.tconst) AS queued";
-  const MY_COLS = "m.curator,m.status,m.score,(SELECT sc.name FROM scale sc WHERE sc.score=m.score) AS tier,m.rank," +
+  const MY_COLS = "m.curator,m.status,m.score,(SELECT sc.name FROM scale sc WHERE sc.score=m.score) AS tier,m.rank,m.favourite,m.guilty," +
     "m.times,m.when_seen,m.memory,m.about,m.reached,m.for_whom,m.avoid,m.note,m.source,m.updated," +
     "(SELECT group_concat(CASE WHEN mt.polarity<0 THEN '-'||mt.tag ELSE mt.tag END, ',') FROM mark_tags mt WHERE mt.curator=m.curator AND mt.tconst=m.tconst) AS tags," +
     "(SELECT group_concat(mf.feeling || ':' || mf.intensity, ',') FROM mark_feelings mf WHERE mf.curator=m.curator AND mf.tconst=m.tconst) AS feelings";
   const STATE_V = 2;   // v2: marks.score + feelings, pairs.reason, queue, scale, feelings vocabulary
   const CSV_COLS = ["curator", "tconst", "title", "year", "directors", "genres", "labels", "countries", "language", "runtime",
-    "rating", "rt", "metacritic", "lists", "status", "score", "tier", "rank", "feelings", "tags_pos", "tags_neg",
+    "rating", "rt", "metacritic", "lists", "status", "score", "tier", "rank", "favourite", "guilty", "feelings", "tags_pos", "tags_neg",
     "times", "when_seen", "memory", "about", "reached", "for_whom", "avoid", "note",
     "source", "updated", "in_library", "keywords", "overview"];
 
@@ -87,6 +87,13 @@
 
   // the catalogue file may have been built before these tables existed (same seeds as setup.py)
   const TIER_NAMES = { 10: "my favourite", 9: "top tier", 8: "excellent", 7: "very good", 6: "good", 4: "ok", 1: "meh", [-2]: "bad but fun", [-3]: "guilty pleasure", [-6]: "really bad", [-8]: "awful", [-10]: "the worst shit ever" };
+  const SCALE_NAMES = { 10: "Wish I could unsee it, to see it again", 9: "What did I just watch. Insane.", 8: "Amazing. Won't shut up about it.",
+    7: "Great. Again tonight.", 6: "Really good. Trust me.", 5: "Good. You'll have a nice time.", 4: "Yeah, it's good.",
+    3: "Decent. Fine for a Tuesday.", 2: "It's fine. Nothing to say.", 1: "It's ok. Don't bother.", 0: "Average. Gone by the weekend.",
+    [-1]: "Meh. Should've picked another.", [-2]: "Checked how long was left.", [-3]: "Almost turned it off.", [-4]: "Turned it off.",
+    [-5]: "Trick your enemies into watching it 😈", [-6]: "Don't let a friend watch this.", [-7]: "Painful. Everything's wrong.",
+    [-8]: "Awful. Hard to think of worse.", [-9]: "Some of the worst shit ever.", [-10]: "The worst shit ever. All wasted." };
+  const GUILTY_TAGS = ["cheesy", "nostalgia", "so-bad-its-good", "comfort", "the-one-scene"];
   const FEELINGS = [["wrecked", "hit hard", "destrozado"], ["unsettled", "hit hard", "inquieto"], ["hollow", "hit hard", "vacío"], ["shaken", "hit hard", "sacudido"],
     ["warm", "hit warm", "reconfortado"], ["giddy", "hit warm", "eufórico"], ["cosy", "hit warm", "acogedor"], ["moved", "hit warm", "conmovido"],
     ["wired", "head", "con la cabeza a mil"], ["satisfied", "head", "redondo"], ["puzzled", "head", "descolocado"],
@@ -101,7 +108,10 @@
     const have = q("PRAGMA table_info(marks)").map(r => r.name);
     if (!have.includes("score")) run("ALTER TABLE marks ADD COLUMN score INTEGER");
     if (!q("PRAGMA table_info(pairs)").some(r => r.name === "reason")) run("ALTER TABLE pairs ADD COLUMN reason TEXT");
-    for (let sc = 10; sc >= -10; sc--) run("INSERT OR IGNORE INTO scale VALUES (?,?)", [sc, TIER_NAMES[sc] || ""]);
+    for (let sc = 10; sc >= -10; sc--) { run("INSERT OR IGNORE INTO scale VALUES (?,?)", [sc, SCALE_NAMES[sc]]);
+      run("UPDATE scale SET name=? WHERE score=? AND (name='' OR name IS NULL OR name=?)", [SCALE_NAMES[sc], sc, TIER_NAMES[sc] || "\u0000"]); }
+    if (!have.includes("favourite")) run("ALTER TABLE marks ADD COLUMN favourite INTEGER DEFAULT 0");
+    if (!have.includes("guilty")) run("ALTER TABLE marks ADD COLUMN guilty TEXT");
     for (const f of FEELINGS) run("INSERT OR IGNORE INTO feelings VALUES (?,?,?)", f);
   }
   const scoreByName = () => Object.fromEntries(q("SELECT name, score FROM scale WHERE name<>''").map(r => [r.name, r.score]));
@@ -140,9 +150,9 @@
       const byName = scoreByName();
       for (const m of s.marks || []) {
         const score = m.score ?? (m.tier ? byName[m.tier] ?? null : null);   // a v1 mark carries a tier name
-        run(`INSERT OR IGNORE INTO marks (curator,tconst,status,score,tier,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
-             VALUES (?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?)`,
-          [m.curator, m.tconst, m.status, score, m.rank, m.times, m.when_seen, m.memory, m.about, m.reached, m.for_whom, m.avoid, m.note, m.source, m.updated]);
+        run(`INSERT OR IGNORE INTO marks (curator,tconst,status,score,tier,rank,favourite,guilty,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
+             VALUES (?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [m.curator, m.tconst, m.status, score, m.rank, m.favourite ? 1 : 0, m.guilty ?? null, m.times, m.when_seen, m.memory, m.about, m.reached, m.for_whom, m.avoid, m.note, m.source, m.updated]);
         for (const t of m.tags || []) {
           const neg = t.startsWith("-"), name = neg ? t.slice(1) : t;
           run("INSERT OR IGNORE INTO tags VALUES (?,?)", [name, "custom"]);
@@ -265,6 +275,7 @@
       const sc = d.score;
       const line = [sc != null ? `score: ${signed(sc)}` + (names[sc] !== signed(sc) ? ` (${names[sc]})` : "") : "score: none yet"];
       if (d.rank) line.push(`rank at that score: ${d.rank}`);
+      if (d.favourite) line.push("♥ one of my favourites"); if (d.guilty) line.push(`🍿 guilty pleasure (${d.guilty})`);
       if (d.directors) line.push(`director: ${d.directors}`);
       if (d.genres) line.push(`imdb genres: ${d.genres}`);
       if (d.labels.length) line.push("labels: " + d.labels.join(", "));
@@ -319,7 +330,7 @@
         (SELECT COUNT(*) FROM pairs WHERE curator=?1 AND skipped=0) AS pairs,
         (SELECT COUNT(*) FROM films WHERE in_library=1) AS library`, [c]);
     const queues = Object.fromEntries(curators().map(cu => [cu.id, val("SELECT COUNT(*) FROM queue WHERE curator=?", [cu.id])]));
-    return { curator: c, curators: curators(), genres, decades, languages, scale, feelings, tags, labels, stats, queues };
+    return { curator: c, curators: curators(), genres, decades, languages, guilty_tags: GUILTY_TAGS, scale, feelings, tags, labels, stats, queues };
   }
 
   const MISSING = {
@@ -454,14 +465,15 @@
     if (score == null && m.tier) score = scoreByName()[m.tier] ?? null;
     if (score != null && !(score >= -10 && score <= 10)) throw new HttpError(400, "score must be between -10 and 10");
     if ((m.feelings || []).length > 2) throw new HttpError(400, "two end-feelings at most: pick the ones that stayed");
+    if (m.guilty && !GUILTY_TAGS.includes(m.guilty)) throw new HttpError(400, "guilty pleasure needs one of: " + GUILTY_TAGS.join(", "));
     const old = one("SELECT score FROM marks WHERE curator=? AND tconst=?", [c, m.tconst]);
     const keepRank = !!(old && old.score === score);
-    run(`INSERT INTO marks (curator,tconst,status,score,tier,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
-         VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,?,?,'me',?)
-         ON CONFLICT(curator,tconst) DO UPDATE SET status=excluded.status, score=excluded.score, tier=NULL, rank=${keepRank ? "rank" : "NULL"},
+    run(`INSERT INTO marks (curator,tconst,status,score,tier,rank,favourite,guilty,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
+         VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,?,?,?,?,'me',?)
+         ON CONFLICT(curator,tconst) DO UPDATE SET status=excluded.status, score=excluded.score, tier=NULL, rank=${keepRank ? "rank" : "NULL"}, favourite=excluded.favourite, guilty=excluded.guilty,
          times=excluded.times, when_seen=excluded.when_seen, memory=excluded.memory, about=excluded.about, reached=excluded.reached,
          for_whom=excluded.for_whom, avoid=excluded.avoid, note=excluded.note, source='me', updated=excluded.updated`,
-      [c, m.tconst, m.status ?? null, score, m.times ?? null, m.when_seen ?? null, m.memory ?? null,
+      [c, m.tconst, m.status ?? null, score, m.favourite ? 1 : 0, m.guilty ?? null, m.times ?? null, m.when_seen ?? null, m.memory ?? null,
         m.about ?? null, m.reached ?? null, m.for_whom ?? null, m.avoid ?? null, m.note ?? null, now()]);
     run("DELETE FROM mark_feelings WHERE curator=? AND tconst=?", [c, m.tconst]);
     for (const fe of m.feelings || []) {

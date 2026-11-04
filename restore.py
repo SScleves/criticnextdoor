@@ -31,9 +31,9 @@ def main():
         score = m.get("score")
         if score is None and m.get("tier"):   # pre-scale exports carry a tier name
             r = con.execute("SELECT score FROM scale WHERE name=?", (m["tier"],)).fetchone(); score = r[0] if r else None
-        con.execute("""INSERT INTO marks (curator,tconst,status,score,rank,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (c, t, m.get("status"), score, m.get("rank"), m.get("times"), m.get("when_seen"), m.get("memory"),
+        con.execute("""INSERT INTO marks (curator,tconst,status,score,rank,favourite,guilty,times,when_seen,memory,about,reached,for_whom,avoid,note,source,updated)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (c, t, m.get("status"), score, m.get("rank"), 1 if m.get("favourite") else 0, m.get("guilty"), m.get("times"), m.get("when_seen"), m.get("memory"),
                      m.get("about"), m.get("reached"), m.get("for_whom"), m.get("avoid"), m.get("note"),
                      m.get("source"), m.get("updated")))
         for fe in m.get("feelings", []):
