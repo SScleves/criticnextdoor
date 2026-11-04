@@ -108,6 +108,12 @@ Write for a person (for Paola), not for the machine; the machine reads it better
 .venv/bin/python lists.py show
 ```
 
+**Lists in the repo.** `lists/*.csv` (Position, Name, Year) are loaded by `python lists.py all`; the file
+name is the list name. Today: AFI 100 (2007), Sight & Sound 2022 critics (top 50; *Man with a Movie
+Camera* and *Meshes of the Afternoon* are a documentary and a short, which the catalogue doesn't hold),
+WGA 101 Screenplays (top 50). To add one: drop a CSV in `lists/` (the Letterboxd snippet in `tools/`
+makes one from any Letterboxd list page) and run `lists.py all` again.
+
 Lists show up as a filter ("IMDb Top 250 · seen 40/250 · avg 6.2"), as a sort ("by list rank"),
 on each card, and as a boost in *for you*. Letterboxd blocks automated reads of other people's
 lists, so for those: your own export, or copy the list into a `Name,Year` CSV.

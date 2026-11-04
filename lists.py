@@ -7,6 +7,7 @@ added from the pool (added=list) so a list is never silently short.
     python lists.py csv "TSPDT 1000" path.csv         # any CSV/TXT: a tt... id per row, or title + year columns
     python lists.py url "Sight & Sound 2022" https://… # a page whose HTML has imdb.com/title/tt… links, in order
     python lists.py letterboxd ~/letterboxd-export     # YOUR Letterboxd export: watched/ratings/watchlist + lists/*.csv
+    python lists.py all                               # every lists/*.csv in this repo (the list name is the file name)
     python lists.py show                              # what's loaded, how much of each you've seen
     python lists.py drop "name"
 
@@ -21,8 +22,7 @@ from setup import DEFAULT_CURATOR, migrate
 CURATOR = os.environ.get("FILMCAT_IMPORT_CURATOR", DEFAULT_CURATOR)
 
 TT = re.compile(r"tt\d{7,8}")
-STARS_TO_TIER = {5: "my favourite", 4.5: "top tier", 4: "excellent", 3.5: "very good", 3: "good",
-                 2.5: "ok", 2: "meh", 1.5: "really bad", 1: "awful", 0.5: "the worst shit ever"}
+STARS_TO_SCORE = {5: 10, 4.5: 9, 4: 8, 3.5: 7, 3: 6, 2.5: 4, 2: 1, 1.5: -6, 1: -8, 0.5: -10}   # Letterboxd stars -> the -10..10 scale
 
 
 def connect():
@@ -141,7 +141,7 @@ def from_url(con, name, url):
 def letterboxd(con, folder):
     """Your own Letterboxd export (unzipped): watched -> seen, ratings -> tier, watchlist -> want, lists/*.csv -> lists."""
     res = Resolver(con)
-    marked = {r[0]: r for r in con.execute("SELECT tconst, status, tier FROM marks WHERE curator=?", (CURATOR,))}
+    marked = {r[0]: r for r in con.execute("SELECT tconst, status, score FROM marks WHERE curator=?", (CURATOR,))}
     films = {r[0] for r in con.execute("SELECT tconst FROM films")}
 
     def film(title, year):
@@ -150,15 +150,15 @@ def letterboxd(con, folder):
             films.add(t)
         return t if t in films else None
 
-    def mark(t, status, tier=None, when=None):
+    def mark(t, status, score=None, when=None):
         cur = marked.get(t)
         if cur is None:
-            con.execute("""INSERT INTO marks (curator,tconst,status,tier,source,updated)
-                           VALUES (?,?,?,?,'letterboxd',COALESCE(?,datetime('now')))""", (CURATOR, t, status, tier, when))
-            marked[t] = (t, status, tier)
-            event(con, "import", t, {"status": status, "tier": tier, "curator": CURATOR}, source="letterboxd"); return 1
-        if tier and cur["tier"] is None and cur["status"] == "seen":
-            con.execute("UPDATE marks SET tier=? WHERE curator=? AND tconst=?", (tier, CURATOR, t)); return 1
+            con.execute("""INSERT INTO marks (curator,tconst,status,score,source,updated)
+                           VALUES (?,?,?,?,'letterboxd',COALESCE(?,datetime('now')))""", (CURATOR, t, status, score, when))
+            marked[t] = {"tconst": t, "status": status, "score": score}
+            event(con, "import", t, {"status": status, "score": score}, source="letterboxd", curator=CURATOR); return 1
+        if score is not None and cur["score"] is None and cur["status"] == "seen":
+            con.execute("UPDATE marks SET score=? WHERE curator=? AND tconst=?", (score, CURATOR, t)); return 1
         return 0
 
     n = 0
@@ -171,8 +171,8 @@ def letterboxd(con, folder):
             t = film(r.get("Name", ""), int(r["Year"]) if r.get("Year", "").isdigit() else None)
             if not t:
                 continue
-            tier = STARS_TO_TIER.get(float(r["Rating"])) if r.get("Rating") else None
-            k += mark(t, status, tier, (r.get("Date") or None) and r["Date"] + " 12:00:00")
+            score = STARS_TO_SCORE.get(float(r["Rating"])) if r.get("Rating") else None
+            k += mark(t, status, score, (r.get("Date") or None) and r["Date"] + " 12:00:00")
         print(f"{fname}: {k} marks"); n += k
     con.commit()
     for p in sorted(glob.glob(os.path.join(folder, "lists", "*.csv"))):
@@ -186,9 +186,8 @@ def show(con):
     for r in con.execute("SELECT list, COUNT(*) n FROM lists GROUP BY list ORDER BY list"):
         cov = []
         for c in curators:
-            s = con.execute("""SELECT SUM(m.status='seen'), ROUND(AVG(CASE WHEN m.status='seen' THEN t.score END),1)
-                               FROM lists l JOIN marks m ON m.tconst=l.tconst AND m.curator=?
-                               LEFT JOIN tiers t ON t.name=m.tier WHERE l.list=?""", (c, r["list"])).fetchone()
+            s = con.execute("""SELECT SUM(m.status='seen'), ROUND(AVG(CASE WHEN m.status='seen' THEN m.score END),1)
+                               FROM lists l JOIN marks m ON m.tconst=l.tconst AND m.curator=? WHERE l.list=?""", (c, r["list"])).fetchone()
             cov.append(f"{c}: seen {s[0] or 0}" + (f", avg {s[1]}" if s[1] is not None else ""))
         print(f"{r['list']:<28} {r['n']:>5} films   " + "   ".join(cov))
 
@@ -209,6 +208,11 @@ def main():
         letterboxd(con, a[1])
     elif cmd == "drop" and len(a) == 2:
         con.execute("DELETE FROM lists WHERE list=?", (a[1],)); con.commit(); print("dropped", a[1])
+    elif cmd == "all":
+        for p in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lists", "*.csv"))):
+            name = os.path.splitext(os.path.basename(p))[0]
+            con.execute("DELETE FROM lists WHERE list=?", (name,))   # reload: a fixed list replaces the old one
+            from_csv(con, name, p)
     elif cmd == "show":
         show(con); return
     else:
