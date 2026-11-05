@@ -25,6 +25,9 @@ def main():
     migrate(con)
     for t in ("marks", "mark_tags", "mark_feelings", "pairs", "events", "queue"):
         con.execute(f"DELETE FROM {t}")
+    # lists made in the app are private: they travel in state.json, not in the public catalogue
+    con.execute("DELETE FROM lists WHERE list IN (SELECT list FROM list_meta WHERE made_by IS NOT NULL)")
+    con.execute("DELETE FROM list_meta WHERE made_by IS NOT NULL")
     # auto labels (seed_labels.py) describe the films and ship; curators' labels are private
     con.execute("DELETE FROM film_labels WHERE IFNULL(source,'me')<>'auto'")
     con.execute("DELETE FROM tags WHERE name NOT IN (%s)" % ",".join("?" * len(TAGS)), [t[0] for t in TAGS])

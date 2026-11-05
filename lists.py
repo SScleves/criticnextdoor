@@ -15,10 +15,10 @@ added from the pool (added=list) so a list is never silently short.
 Letterboxd does not allow automated reads of other people's lists. Use your own export
 (Settings -> Import & Export), or copy a list into a CSV with Name,Year columns.
 """
-import csv, glob, io, os, re, sqlite3, sys
+import csv, glob, io, os, re, sqlite3, sys, unicodedata
 
 from app import DB, add_from_pool, event, write_exports
-from setup import DEFAULT_CURATOR, migrate
+from setup import DEFAULT_CURATOR, list_category, migrate
 
 CURATOR = os.environ.get("FILMCAT_IMPORT_CURATOR", DEFAULT_CURATOR)
 
@@ -39,6 +39,7 @@ def norm(s):
     m = re.match(r"^(.*), (the|a|an|la|le|les|l'|il|el|los|las|der|die|das|un|une)$", s, re.I)
     if m:                                                            # 'Godfather, The' / "Atalante, L'" (library order)
         art = m.group(2); s = (art + ("" if art.endswith("'") else " ") + m.group(1))
+    s = "".join(ch for ch in unicodedata.normalize("NFD", s) if unicodedata.category(ch) != "Mn")   # Amélie == Amelie
     s = s.lower().replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     s = re.sub(r"\s*[:\-–—]\s*", " ", s)
     s = re.sub(r"[^\w\s]", "", s)
@@ -55,11 +56,19 @@ class Resolver:
     ('The Empire Strikes Back' -> 'Star Wars: Episode V - The Empire Strikes Back')."""
 
     def __init__(self, con):
-        self.by, self.by_year = {}, {}
-        for t, title, orig, year, votes in con.execute("SELECT tconst,title,original_title,year,votes FROM pool ORDER BY votes DESC"):
+        self.by, self.by_year, self.by_name, self.by_sq = {}, {}, {}, {}
+        rows = con.execute("""SELECT tconst,title,original_title,year,votes FROM pool
+                              UNION SELECT tconst,title,original_title,year,votes FROM films ORDER BY votes DESC""")
+        seen = set()
+        for t, title, orig, year, votes in rows:
+            if t in seen:
+                continue
+            seen.add(t)
             names = {norm(title), norm(orig or "")} - {""}
             for name in names:
                 self.by.setdefault((name, year), []).append(t)
+                self.by_name.setdefault(name, []).append(t)
+                self.by_sq.setdefault(name.replace(" ", ""), []).append((t, year))   # 'Wall-E' == 'WALL·E'
             self.by_year.setdefault(year, []).append((t, names))
 
     def __call__(self, title, year):
@@ -81,11 +90,69 @@ class Resolver:
                 c = self.by.get((norm(head), y))
                 if c:
                     return c[0]
+        for t, y in self.by_sq.get(title.replace(" ", ""), []):
+            if not year or y in years:
+                return t
+        if not year:   # no year given: the best-known film with exactly that title
+            c = self.by_name.get(title) or (self.by_name.get(norm(head)) if head != raw else None)
+            if c:
+                return c[0]
         return None
 
 
-def save(con, name, tconsts, note=""):
+def parse_lines(text):
+    """
+    Pasted text -> [(line, title, year) or (line, tconst, None)], in order. Takes: 'Title (1999)',
+    'Title [1999]', 'Title, 1999', '12. Title 1999', CSV rows 'Position,Name,Year', IMDb links/ids,
+    and pages where the year sits on its own line under each title. Rank-only lines are dropped.
+    """
+    lines = [l.strip() for l in text.splitlines()]
+    lines = [l for l in lines if l and not re.fullmatch(r"(?i)(position|rank|#)?\s*,?\s*(name|title)\s*,\s*year.*", l)]
+    is_year = lambda l: bool(re.fullmatch(r"\(?(18[89]\d|19\d\d|20[0-3]\d)\)?", l))
+    is_rank = lambda l: bool(re.fullmatch(r"#?\d{1,4}[.)]?", l)) and not is_year(l)
+    years_alone = sum(map(is_year, lines))
+    alternating = years_alone >= 0.4 * max(1, len(lines) - years_alone - sum(map(is_rank, lines)))
+    out = []
+    for l in lines:
+        m = TT.search(l)
+        if m:
+            out.append((l, m.group(0), None)); continue
+        if alternating and is_year(l) and out and out[-1][2] is None and not TT.fullmatch(out[-1][1]):
+            out[-1] = (out[-1][0] + " " + l, out[-1][1], int(l.strip("()")))   # the year under its title
+            continue                                                         # (else it's a title: '1917')
+        if is_rank(l):
+            continue
+        c = re.match(r'^\d+\s*,\s*"?(.+?)"?\s*,\s*(\d{4})\b', l)                  # CSV: 1,"Title, The",1999
+        if c:
+            out.append((l, c.group(1), int(c.group(2)))); continue
+        t = re.sub(r"^#?\d{1,4}\s*[.):\-–]\s+", "", l)                                 # '12. Title'
+        y = None
+        m = (re.match(r"^(.*?)\s*[(\[]\s*(\d{4})\s*[)\]]", t)                        # 'Title (1999) …'
+             or re.match(r"^(.*?)\s*[,–—-]\s*(\d{4})$", t) or re.match(r"^(.*\S)\s+(\d{4})$", t))
+        if m and 1888 <= int(m.group(2)) <= 2035:
+            t, y = m.group(1).strip(" ,-–—"), int(m.group(2))
+        if t:
+            out.append((l, t, y))
+    return out
+
+
+def resolve_text(con, text, resolver=None):
+    """parse_lines + Resolver: [{line, title, year, tconst}] for the in-app list editor."""
+    res = resolver or Resolver(con)
+    out = []
+    for line, t, y in parse_lines(text):
+        if TT.fullmatch(t):
+            out.append({"line": line, "title": None, "year": None, "tconst": t}); continue
+        out.append({"line": line, "title": t, "year": y, "tconst": res(t, y)})
+    return out
+
+
+def save(con, name, tconsts, note="", category=None, source=None):
     tconsts = list(dict.fromkeys(t for t in tconsts if t))
+    con.execute("""INSERT INTO list_meta (list, category, made_by, source, deleted) VALUES (?,?,NULL,?,0)
+                   ON CONFLICT(list) DO UPDATE SET category=excluded.category, source=excluded.source, deleted=0,
+                                                   updated=datetime('now')""",
+                (name, category or list_category(name), source or ("computed" if "computed" in note else "")))
     films = {r[0] for r in con.execute("SELECT tconst FROM films")}
     added, missing = 0, 0
     con.execute("DELETE FROM lists WHERE list=?", (name,))
@@ -241,7 +308,8 @@ def main():
     elif cmd == "letterboxd" and len(a) == 2:
         letterboxd(con, a[1])
     elif cmd == "drop" and len(a) == 2:
-        con.execute("DELETE FROM lists WHERE list=?", (a[1],)); con.commit(); print("dropped", a[1])
+        con.execute("DELETE FROM lists WHERE list=?", (a[1],)); con.execute("DELETE FROM list_meta WHERE list=?", (a[1],))
+        con.commit(); print("dropped", a[1])
     elif cmd == "decades":
         genre_decades(con)
     elif cmd == "all":

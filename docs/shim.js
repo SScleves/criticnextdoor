@@ -104,6 +104,8 @@
     run("CREATE TABLE IF NOT EXISTS feelings (name TEXT PRIMARY KEY, grp TEXT, es TEXT)");
     run("CREATE TABLE IF NOT EXISTS mark_feelings (curator TEXT, tconst TEXT, feeling TEXT, intensity INTEGER DEFAULT 2, PRIMARY KEY (curator, tconst, feeling))");
     run("CREATE TABLE IF NOT EXISTS queue (curator TEXT, tconst TEXT, added TEXT, PRIMARY KEY (curator, tconst))");
+    run(`CREATE TABLE IF NOT EXISTS list_meta (list TEXT PRIMARY KEY, category TEXT, made_by TEXT, source TEXT,
+         created TEXT DEFAULT (datetime('now')), updated TEXT DEFAULT (datetime('now')), deleted INTEGER DEFAULT 0)`);
     if (!q("PRAGMA table_info(film_labels)").some(r => r.name === "source")) run("ALTER TABLE film_labels ADD COLUMN source TEXT DEFAULT 'me'");
     const have = q("PRAGMA table_info(marks)").map(r => r.name);
     if (!have.includes("score")) run("ALTER TABLE marks ADD COLUMN score INTEGER");
@@ -117,7 +119,7 @@
   const scoreByName = () => Object.fromEntries(q("SELECT name, score FROM scale WHERE name<>''").map(r => [r.name, r.score]));
 
   // ---- private state: collect / apply / merge ------------------------------------
-  const emptyState = () => ({ v: STATE_V, ts: now(), marks: [], film_labels: {}, tags: [], labels: [], feelings: [], scale: [], queue: [], pairs: [], events: [], added: [] });
+  const emptyState = () => ({ v: STATE_V, ts: now(), marks: [], film_labels: {}, tags: [], labels: [], feelings: [], scale: [], queue: [], pairs: [], events: [], added: [], lists: [] });
 
   function collectState() {
     const marks = q(`SELECT ${MY_COLS}, m.tconst FROM marks m`).map(r => ({ ...r, tags: parts(r.tags, ","), feelings: parts(r.feelings, ",") }));
@@ -133,6 +135,7 @@
       pairs: q("SELECT ts,a,b,winner,skipped,curator,reason FROM pairs"),
       events: q("SELECT ts,kind,tconst,payload,source,curator FROM events"),
       added: q("SELECT tconst, added FROM films WHERE added IS NOT NULL AND added<>'filter'"),
+      lists: userLists(),
     };
   }
 
@@ -174,6 +177,7 @@
       }
       for (const p of s.pairs || []) run("INSERT INTO pairs (ts,a,b,winner,skipped,curator,reason) VALUES (?,?,?,?,?,?,?)", [p.ts, p.a, p.b, p.winner, p.skipped, p.curator, p.reason ?? null]);
       for (const e of s.events || []) run("INSERT INTO events (ts,kind,tconst,payload,source,curator) VALUES (?,?,?,?,?,?)", [e.ts, e.kind, e.tconst, e.payload, e.source, e.curator]);
+      applyUserLists(s.lists);
       run("COMMIT");
     } catch (e) { run("ROLLBACK"); throw e; }
   }
@@ -194,6 +198,7 @@
       pairs: uniq([...(a.pairs || []), ...(b.pairs || [])], p => [p.curator, p.a, p.b, p.ts].join("|")),
       events: uniq([...(a.events || []), ...(b.events || [])], e => [e.ts, e.kind, e.tconst, e.curator, e.payload].join("|")),
       added: uniq([...(a.added || []), ...(b.added || [])], x => x.tconst),
+      lists: mergeUserLists(a.lists, b.lists),
     };
   }
 
@@ -404,18 +409,165 @@
 
   function lists() {
     const cs = curators(), out = [];
-    for (const r of q("SELECT list, COUNT(*) AS total FROM lists GROUP BY list ORDER BY list")) {
-      const d = { list: r.list, total: r.total, by: {} };
+    for (const r of q(`SELECT l.list, COUNT(*) AS total, lm.category, lm.made_by, lm.source, lm.created
+                       FROM lists l LEFT JOIN list_meta lm ON lm.list=l.list GROUP BY l.list ORDER BY l.list`)) {
+      const d = { list: r.list, total: r.total, category: r.category || listCategory(r.list), made_by: r.made_by, source: r.source || "", created: r.created, by: {}, next: {} };
       for (const c of cs) {
         const s = one(`SELECT SUM(m.status='seen') AS seen, SUM(m.status='want') AS want, SUM(m.status='seen' AND m.score IS NOT NULL) AS tiered,
-                       SUM(m.status='seen' AND ${NOTED_SQL}) AS noted, ROUND(AVG(CASE WHEN m.status='seen' THEN m.score END), 1) AS avg_score,
+                       SUM(m.status='seen' AND ${NOTED_SQL}) AS noted, SUM(IFNULL(m.status,'')<>'') AS marked,
+                       ROUND(AVG(CASE WHEN m.status='seen' THEN m.score END), 1) AS avg_score,
                        (SELECT COUNT(*) FROM queue qq JOIN lists l2 ON l2.tconst=qq.tconst AND l2.list=l.list WHERE qq.curator=m.curator) AS queued
                        FROM lists l JOIN marks m ON m.tconst=l.tconst AND m.curator=? WHERE l.list=?`, [c.id, r.list]);
         d.by[c.id] = Object.fromEntries(Object.entries(s).map(([k, v]) => [k, k === "avg_score" ? v : (v || 0)]));
+        d.next[c.id] = val(`SELECT l.tconst FROM lists l WHERE l.list=? AND NOT EXISTS
+                            (SELECT 1 FROM marks m WHERE m.tconst=l.tconst AND m.curator=? AND IFNULL(m.status,'')<>'') ORDER BY l.rank LIMIT 1`, [r.list, c.id]);
       }
       out.push(d);
     }
     return { lists: out, curators: cs };
+  }
+
+  // ---- lists you make in the app (same as app.py + lists.py) --------------------------
+  function listCategory(name) {
+    const n = name.toLowerCase();
+    if (/ · \d{4}s$/.test(name)) return "By decade";
+    if (n.startsWith("lb: ")) return "Letterboxd";
+    if (/oscar|academy award|palme|bafta|golden (globe|lion|bear)|cannes/.test(n)) return "Awards";
+    if (/horror|comed|funn|sci-?fi|science fiction|action|thriller|animat|western|musical|romanc|war film|documentar|noir|fantasy|crime/.test(n)) return "Genre";
+    return "Canon";
+  }
+  const ARTICLES = "the|a|an|la|le|les|l'|il|el|los|las|der|die|das|un|une";
+  function titleNorm(s) {   // lists.py norm(): 'Godfather, The' == 'The Godfather', Amélie == Amelie, Colours == Colors
+    s = (s || "").replace(/\s*\[\d{4}\]\s*$/, "");
+    const m = s.match(new RegExp(`^(.*), (${ARTICLES})$`, "i"));
+    if (m) s = m[2] + (m[2].endsWith("'") ? "" : " ") + m[1];
+    s = s.normalize("NFD").replace(/\p{Mn}/gu, "").toLowerCase().replace(/[’‘]/g, "'").replace(/[“”]/g, '"');
+    s = s.replace(/\s*[:\-–—]\s*/g, " ").replace(/[^\p{L}\p{N}_\s]/gu, "");
+    s = s.replace(/colour/g, "color").replace(/\bneighbour/g, "neighbor").replace("sunset blvd", "sunset boulevard").replace("cleo from 5 to 7", "cleo de 5 a 7");
+    s = s.replace(/^ali fear eats the soul$/, "fear eats the soul");
+    return s.replace(/\s+/g, " ").trim();
+  }
+  let RES = null;
+  function resolver() {
+    const key = val("SELECT COUNT(*) FROM pool");   // films only ever come from the pool
+    if (RES && RES.key === key) return RES.fn;
+    const by = new Map(), byYear = new Map(), byName = new Map(), bySq = new Map(), seen = new Set();
+    const push = (m, k, v) => { const a = m.get(k); a ? a.push(v) : m.set(k, [v]); };
+    const st = db.prepare("SELECT tconst,title,original_title,year,votes FROM pool UNION SELECT tconst,title,original_title,year,votes FROM films ORDER BY votes DESC");
+    while (st.step()) {
+      const [t, title, orig, year] = st.get(); if (seen.has(t)) continue; seen.add(t);
+      const names = [...new Set([titleNorm(title), titleNorm(orig)])].filter(Boolean);
+      for (const n of names) { push(by, n + "|" + year, t); push(byName, n, t); push(bySq, n.replace(/ /g, ""), [t, year]); }   // 'Wall-E' == 'WALL·E'
+      push(byYear, year, [t, names]);
+    }
+    st.free();
+    const fn = (raw, year) => {
+      const title = titleNorm(raw), years = year ? [year, year - 1, year + 1] : [];
+      for (const y of years) { const c = by.get(title + "|" + y); if (c) return c[0]; }   // ordered by votes: the better-known film wins a tie
+      if (title.length >= 6) for (const y of years) for (const [t, names] of byYear.get(y) || []) if (names.some(n => n.includes(title))) return t;
+      const head = raw.split(/\s*(?::|\s[–—-]\s)\s*/)[0];
+      if (head !== raw && titleNorm(head).length >= 4) for (const y of years) { const c = by.get(titleNorm(head) + "|" + y); if (c) return c[0]; }
+      for (const [t, y] of bySq.get(title.replace(/ /g, "")) || []) if (!year || years.includes(y)) return t;
+      if (!year) { const c = byName.get(title) || (head !== raw ? byName.get(titleNorm(head)) : null); if (c) return c[0]; }
+      return null;
+    };
+    RES = { key, fn }; return fn;
+  }
+  const TT = /tt\d{7,8}/;
+  function parseLines(text) {   // lists.py parse_lines()
+    const isYear = l => /^\(?(18[89]\d|19\d\d|20[0-3]\d)\)?$/.test(l);
+    const isRank = l => /^#?\d{1,4}[.)]?$/.test(l) && !isYear(l);
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !/^(position|rank|#)?\s*,?\s*(name|title)\s*,\s*year/i.test(l));
+    const yearsAlone = lines.filter(isYear).length;
+    const alternating = yearsAlone >= 0.4 * Math.max(1, lines.length - yearsAlone - lines.filter(isRank).length);
+    const out = [];
+    for (const l of lines) {
+      const m = l.match(TT); if (m) { out.push([l, m[0], null]); continue; }
+      const prev = out[out.length - 1];
+      if (alternating && isYear(l) && prev && prev[2] == null && !/^tt\d{7,8}$/.test(prev[1])) { out[out.length - 1] = [prev[0] + " " + l, prev[1], +l.replace(/[()]/g, "")]; continue; }
+      if (isRank(l)) continue;
+      const c = l.match(/^\d+\s*,\s*"?(.+?)"?\s*,\s*(\d{4})\b/); if (c) { out.push([l, c[1], +c[2]]); continue; }
+      let t = l.replace(/^#?\d{1,4}\s*[.):\-–]\s+/, ""), y = null;
+      const ym = t.match(/^(.*?)\s*[(\[]\s*(\d{4})\s*[)\]]/) || t.match(/^(.*?)\s*[,–—-]\s*(\d{4})$/) || t.match(/^(.*\S)\s+(\d{4})$/);
+      if (ym && +ym[2] >= 1888 && +ym[2] <= 2035) { t = ym[1].replace(/^[ ,\-–—]+|[ ,\-–—]+$/g, ""); y = +ym[2]; }
+      if (t) out.push([l, t, y]);
+    }
+    return out;
+  }
+  const filmBrief = t => one("SELECT tconst,title,year,directors,rating,votes,poster FROM films WHERE tconst=?", [t])
+    || one("SELECT tconst,title,year,directors,rating,votes,NULL AS poster FROM pool WHERE tconst=?", [t]);
+  function listGet(p) {
+    const name = p.get("name") || "", m = one("SELECT * FROM list_meta WHERE list=? AND deleted=0", [name]);
+    const rows = q("SELECT tconst FROM lists WHERE list=? ORDER BY rank", [name]);
+    if (!rows.length && !m) throw new HttpError(404, "no such list");
+    return { list: name, category: (m && m.category) || listCategory(name), made_by: m ? m.made_by : null, items: rows.map(r => filmBrief(r.tconst)) };
+  }
+  function listResolve(b) {
+    const text = (b && b.text) || ""; if (text.length > 200000) throw new HttpError(400, "that's more than a list");
+    const res = resolver();
+    return { items: parseLines(text).map(([line, t, y]) => {
+      const it = /^tt\d{7,8}$/.test(t) ? { line, title: null, year: null, tconst: t } : { line, title: t, year: y, tconst: res(t, y) };
+      it.film = it.tconst ? filmBrief(it.tconst) : null; if (!it.film) it.tconst = null;
+      return it; }) };
+  }
+  function saveUserList(name, category, items, curator, oldName = "") {
+    name = (name || "").trim(); category = (category || "Mine").trim() || "Mine";
+    if (!name || name.length > 120) throw new HttpError(400, "a list needs a name (up to 120 characters)");
+    for (const n of new Set([name, oldName].filter(Boolean))) {
+      const m = one("SELECT made_by FROM list_meta WHERE list=?", [n]);
+      if (m && m.made_by == null && one("SELECT 1 FROM lists WHERE list=?", [n])) throw new HttpError(400, `“${n}” comes from the repo; pick another name`);
+    }
+    if (oldName && oldName !== name) {
+      if (one("SELECT 1 FROM list_meta WHERE list=? AND deleted=0", [name])) throw new HttpError(400, `there's already a list called “${name}”`);
+      run("DELETE FROM lists WHERE list=?", [oldName]);
+      run("UPDATE list_meta SET deleted=1, updated=? WHERE list=?", [now(), oldName]);
+    }
+    run("DELETE FROM lists WHERE list=?", [name]);
+    let rank = 0;
+    for (const t of [...new Set(items || [])]) {
+      if (!one("SELECT 1 FROM films WHERE tconst=?", [t]) && !addFromPool(t, "list", false)) continue;
+      run("INSERT INTO lists (list,rank,tconst) VALUES (?,?,?)", [name, ++rank, t]);
+    }
+    run(`INSERT INTO list_meta (list,category,made_by,source,created,updated,deleted) VALUES (?,?,?,'',?,?,0)
+         ON CONFLICT(list) DO UPDATE SET category=excluded.category, made_by=excluded.made_by, deleted=0, updated=excluded.updated`,
+        [name, category, curator, now(), now()]);
+    return rank;
+  }
+  function listSave(b) {
+    const c = checkCurator(b.curator || DEFAULT_CURATOR);
+    const n = saveUserList(b.name, b.category, b.items, c, b.old_name || "");
+    event("list", null, { list: b.name.trim(), category: b.category, items: n, old_name: b.old_name || null }, "me", c);
+    persist(); return { list: b.name.trim(), total: n };
+  }
+  function listDelete(b) {
+    const m = one("SELECT made_by FROM list_meta WHERE list=?", [b.name]);
+    if (!m || m.made_by == null) throw new HttpError(400, "only lists made in the app can be deleted here");
+    run("DELETE FROM lists WHERE list=?", [b.name]);
+    run("UPDATE list_meta SET deleted=1, updated=? WHERE list=?", [now(), b.name]);
+    event("list", null, { list: b.name, deleted: true }, "me", b.curator || DEFAULT_CURATOR);
+    persist(); return { ok: true };
+  }
+  const userLists = () => q("SELECT list, category, made_by, created, updated, deleted FROM list_meta WHERE made_by IS NOT NULL ORDER BY list")
+    .map(m => ({ ...m, deleted: m.deleted || 0, items: m.deleted ? [] : q("SELECT tconst FROM lists WHERE list=? ORDER BY rank", [m.list]).map(r => r.tconst) }));
+  function mergeUserLists(a, b) {   // per list name, the newest edit (or deletion) wins
+    const out = new Map();
+    for (const x of [...(a || []), ...(b || [])]) { const cur = out.get(x.list); if (!cur || (x.updated || "") >= (cur.updated || "")) out.set(x.list, x); }
+    return [...out.values()];
+  }
+  function applyUserLists(rows) {
+    run("DELETE FROM lists WHERE list IN (SELECT list FROM list_meta WHERE made_by IS NOT NULL)");
+    run("DELETE FROM list_meta WHERE made_by IS NOT NULL");
+    for (const x of mergeUserLists(rows, [])) {   // newest per name, whatever the input
+      if (one("SELECT 1 FROM list_meta WHERE list=?", [x.list])) continue;   // clashes with a repo list
+      run("INSERT INTO list_meta (list,category,made_by,source,created,updated,deleted) VALUES (?,?,?,'',?,?,?)",
+          [x.list, x.category || "Mine", x.made_by || DEFAULT_CURATOR, x.created || x.updated || now(), x.updated || now(), x.deleted ? 1 : 0]);
+      if (x.deleted) continue;
+      let rank = 0;
+      for (const t of x.items || []) {
+        if (!one("SELECT 1 FROM films WHERE tconst=?", [t]) && !addFromPool(t, "list", false)) continue;
+        run("INSERT OR IGNORE INTO lists (list,rank,tconst) VALUES (?,?,?)", [x.list, ++rank, t]);
+      }
+    }
   }
 
   function recommend(p) {
@@ -652,6 +804,8 @@
 
   function pool(p) {
     const s = `%${p.get("q") || ""}%`, limit = Math.min(+(p.get("limit") || 30), 100);
+    if (p.get("all")) return { films: q(`SELECT tconst,title,year,directors,rating,votes FROM films WHERE title LIKE ? OR original_title LIKE ?
+      UNION SELECT tconst,title,year,directors,rating,votes FROM pool WHERE title LIKE ? OR original_title LIKE ? ORDER BY votes DESC LIMIT ?`, [s, s, s, s, limit]) };
     return { films: q(`SELECT p.* FROM pool p LEFT JOIN films f ON f.tconst=p.tconst WHERE f.tconst IS NULL AND (p.title LIKE ? OR p.original_title LIKE ? OR p.directors LIKE ?) ORDER BY p.votes DESC LIMIT ?`, [s, s, s, limit]) };
   }
   function addFromPool(tconst, added = "pool", log = true) {
@@ -669,7 +823,7 @@
   function exportJson() {
     return { marks: [...markRows()], pairs: q("SELECT * FROM pairs ORDER BY id"), scale: q("SELECT * FROM scale ORDER BY score DESC"),
       feelings: q("SELECT * FROM feelings"), tags: q("SELECT * FROM tags ORDER BY grp,name"), labels: q("SELECT * FROM labels ORDER BY grp,name"),
-      queue: q("SELECT * FROM queue ORDER BY curator, added"), curators: curators() };
+      queue: q("SELECT * FROM queue ORDER BY curator, added"), lists: userLists(), curators: curators() };
   }
 
   // ---- router -----------------------------------------------------------------------
@@ -682,6 +836,7 @@
       if (r === "films") return films(p);
       if (seg[1] === "film" && seg[2]) return film(seg[2], p.get("curator") || DEFAULT_CURATOR);
       if (r === "lists") return lists();
+      if (r === "list") return listGet(p);
       if (r === "recommend") return recommend(p);
       if (r === "suggest") return suggest(p);
       if (r === "ladder") return ladder(p);
@@ -701,6 +856,9 @@
       if (r === "ladder") return saveLadder(body);
       if (r === "pair") return savePair(body);
       if (r === "add") return add(body);
+      if (r === "list") return listSave(body);
+      if (r === "list/resolve") return listResolve(body);
+      if (r === "list/delete") return listDelete(body);
     }
     if (method === "DELETE" && ["tag", "label", "feeling"].includes(seg[1]) && seg[2]) return deleteVocab(seg[1], decodeURIComponent(seg[2]));
     throw new HttpError(404, `no route ${method} ${path}`);

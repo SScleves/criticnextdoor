@@ -351,23 +351,151 @@ def film(tconst: str, curator: str = DEFAULT_CURATOR):
 
 @app.get("/api/lists")
 def lists():
-    """Each loaded list, with how much of it every curator has done: the consolidated view of a list-as-project."""
+    """
+    Each list with its shelf (category), who made it, and how much of it every curator has done:
+    the consolidated view of a list-as-project. `next` is the first film by rank a curator hasn't marked.
+    """
     con = db()
     cs = curators(con)
     out = []
-    for r in con.execute("SELECT list, COUNT(*) AS total FROM lists GROUP BY list ORDER BY list"):
-        d = {"list": r["list"], "total": r["total"], "by": {}}
+    for r in con.execute("""SELECT l.list, COUNT(*) AS total, lm.category, lm.made_by, lm.source, lm.created
+                            FROM lists l LEFT JOIN list_meta lm ON lm.list=l.list
+                            GROUP BY l.list ORDER BY l.list"""):
+        d = {"list": r["list"], "total": r["total"], "category": r["category"] or "Canon", "made_by": r["made_by"],
+             "source": r["source"] or "", "created": r["created"], "by": {}, "next": {}}
         for c in cs:
             s = con.execute(f"""SELECT SUM(m.status='seen') AS seen, SUM(m.status='want') AS want,
                                        SUM(m.status='seen' AND m.score IS NOT NULL) AS tiered,
                                        SUM(m.status='seen' AND {NOTED_SQL}) AS noted,
+                                       SUM(IFNULL(m.status,'')<>'') AS marked,
                                        ROUND(AVG(CASE WHEN m.status='seen' THEN m.score END), 1) AS avg_score,
                                        (SELECT COUNT(*) FROM queue qq JOIN lists l2 ON l2.tconst=qq.tconst AND l2.list=l.list WHERE qq.curator=m.curator) AS queued
                                 FROM lists l JOIN marks m ON m.tconst=l.tconst AND m.curator=?
                                 WHERE l.list=?""", (c["id"], r["list"])).fetchone()
             d["by"][c["id"]] = {k: (s[k] if k == "avg_score" else (s[k] or 0)) for k in s.keys()}
+            n = con.execute("""SELECT l.tconst FROM lists l WHERE l.list=? AND NOT EXISTS
+                                 (SELECT 1 FROM marks m WHERE m.tconst=l.tconst AND m.curator=? AND IFNULL(m.status,'')<>'')
+                               ORDER BY l.rank LIMIT 1""", (r["list"], c["id"])).fetchone()
+            d["next"][c["id"]] = n[0] if n else None
         out.append(d)
     return {"lists": out, "curators": cs}
+
+
+# ---- lists you make in the app ----------------------------------------------------
+
+_resolver = {"key": None, "res": None}
+
+
+def resolver(con):
+    """lists.Resolver indexes ~50k titles: build it once per catalogue size."""
+    from lists import Resolver
+    key = con.execute("SELECT COUNT(*) FROM pool").fetchone()[0]   # films only ever come from the pool
+    if _resolver["key"] != key:
+        _resolver.update(key=key, res=Resolver(con))
+    return _resolver["res"]
+
+
+def film_brief(con, tconst):
+    r = (con.execute("SELECT tconst,title,year,directors,rating,votes,poster FROM films WHERE tconst=?", (tconst,)).fetchone()
+         or con.execute("SELECT tconst,title,year,directors,rating,votes,NULL AS poster FROM pool WHERE tconst=?", (tconst,)).fetchone())
+    return dict(r) if r else None
+
+
+@app.get("/api/list")
+def list_get(name: str):
+    con = db()
+    m = con.execute("SELECT * FROM list_meta WHERE list=? AND deleted=0", (name,)).fetchone()
+    rows = con.execute("SELECT tconst FROM lists WHERE list=? ORDER BY rank", (name,)).fetchall()
+    if not rows and not m:
+        raise HTTPException(404, "no such list")
+    return {"list": name, "category": (m["category"] if m else None) or "Canon", "made_by": m["made_by"] if m else None,
+            "items": [film_brief(con, r[0]) for r in rows]}
+
+
+class Resolve(BaseModel):
+    text: str
+
+
+@app.post("/api/list/resolve")
+def list_resolve(b: Resolve):
+    """Pasted titles -> films. Each line says what it matched (or nothing), so misses can be fixed by hand."""
+    from lists import resolve_text
+    con = db()
+    if len(b.text) > 200_000:
+        raise HTTPException(400, "that's more than a list")
+    items = resolve_text(con, b.text, resolver(con))
+    for it in items:
+        it["film"] = film_brief(con, it["tconst"]) if it["tconst"] else None
+        if it["tconst"] and not it["film"]:
+            it["tconst"] = None   # an IMDb id we don't have (short, TV, too few votes)
+    return {"items": items}
+
+
+class ListSave(BaseModel):
+    name: str
+    category: str = "Mine"
+    items: list[str]
+    curator: str = DEFAULT_CURATOR
+    old_name: str = ""
+
+
+def save_user_list(con, name, category, items, curator, old_name=""):
+    name, category = name.strip(), (category or "Mine").strip()
+    if not name or len(name) > 120:
+        raise HTTPException(400, "a list needs a name (up to 120 characters)")
+    for n in {name, old_name} - {""}:
+        m = con.execute("SELECT made_by FROM list_meta WHERE list=?", (n,)).fetchone()
+        if m and m["made_by"] is None and con.execute("SELECT 1 FROM lists WHERE list=?", (n,)).fetchone():
+            raise HTTPException(400, f"“{n}” comes from the repo; pick another name")
+    if old_name and old_name != name:
+        if con.execute("SELECT 1 FROM list_meta WHERE list=? AND deleted=0", (name,)).fetchone():
+            raise HTTPException(400, f"there's already a list called “{name}”")
+        con.execute("DELETE FROM lists WHERE list=?", (old_name,))
+        con.execute("UPDATE list_meta SET deleted=1, updated=datetime('now') WHERE list=?", (old_name,))
+    films = {r[0] for r in con.execute("SELECT tconst FROM films")}
+    con.execute("DELETE FROM lists WHERE list=?", (name,))
+    rank = 0
+    for t in dict.fromkeys(items):
+        if t not in films:
+            if not add_from_pool(con, t, "list"):
+                continue
+            films.add(t)
+        rank += 1
+        con.execute("INSERT INTO lists (list,rank,tconst) VALUES (?,?,?)", (name, rank, t))
+    con.execute("""INSERT INTO list_meta (list,category,made_by,source,deleted) VALUES (?,?,?,'',0)
+                   ON CONFLICT(list) DO UPDATE SET category=excluded.category, made_by=excluded.made_by,
+                                                   deleted=0, updated=datetime('now')""", (name, category, curator))
+    event(con, "list", None, {"list": name, "category": category, "items": rank, "old_name": old_name or None}, curator=curator)
+    return rank
+
+
+@app.post("/api/list")
+def list_save(b: ListSave):
+    con = db()
+    check_curator(con, b.curator)
+    n = save_user_list(con, b.name, b.category, b.items, b.curator, b.old_name)
+    con.commit()
+    export_later()
+    return {"list": b.name.strip(), "total": n}
+
+
+class ListDelete(BaseModel):
+    name: str
+    curator: str = DEFAULT_CURATOR
+
+
+@app.post("/api/list/delete")
+def list_delete(b: ListDelete):
+    con = db()
+    m = con.execute("SELECT made_by FROM list_meta WHERE list=?", (b.name,)).fetchone()
+    if not m or m["made_by"] is None:
+        raise HTTPException(400, "only lists made in the app can be deleted here (repo lists: lists.py drop)")
+    con.execute("DELETE FROM lists WHERE list=?", (b.name,))
+    con.execute("UPDATE list_meta SET deleted=1, updated=datetime('now') WHERE list=?", (b.name,))
+    event(con, "list", None, {"list": b.name, "deleted": True}, curator=b.curator)
+    con.commit()
+    export_later()
+    return {"ok": True}
 
 
 # ---- "for you": a baseline taste match, to be replaced by the real model ---
@@ -885,8 +1013,14 @@ def progress(curator: str = DEFAULT_CURATOR):
 # ---- pool: add a film the filter left out ----------------------------------
 
 @app.get("/api/pool")
-def pool(q: str = "", limit: int = Query(30, le=100)):
+def pool(q: str = "", limit: int = Query(30, le=100), all: int = 0):
+    """Films the catalogue doesn't have; all=1 searches catalogue + pool (the list editor's 'find a film')."""
     con = db()
+    if all:
+        rows = con.execute("""SELECT tconst,title,year,directors,rating,votes FROM films WHERE title LIKE ? OR original_title LIKE ?
+                              UNION SELECT tconst,title,year,directors,rating,votes FROM pool WHERE title LIKE ? OR original_title LIKE ?
+                              ORDER BY votes DESC LIMIT ?""", [f"%{q}%"] * 4 + [limit]).fetchall()
+        return {"films": [dict(r) for r in rows]}
     rows = con.execute("""SELECT p.* FROM pool p LEFT JOIN films f ON f.tconst=p.tconst
                           WHERE f.tconst IS NULL AND (p.title LIKE ? OR p.original_title LIKE ? OR p.directors LIKE ?)
                           ORDER BY p.votes DESC LIMIT ?""", [f"%{q}%"] * 3 + [limit]).fetchall()
@@ -947,7 +1081,49 @@ def export_json():
             "tags": [dict(r) for r in con.execute("SELECT * FROM tags ORDER BY grp,name")],
             "labels": [dict(r) for r in con.execute("SELECT * FROM labels ORDER BY grp,name")],
             "queue": [dict(r) for r in con.execute("SELECT * FROM queue ORDER BY curator, added")],
+            "lists": user_lists(con),
             "curators": curators(con)}
+
+
+def merge_user_lists(a, b):
+    """Per list name, the newest edit (or deletion) wins. Shared by sync_state.py; docs/shim.js mirrors it."""
+    out = {}
+    for x in (a or []) + (b or []):
+        if x["list"] not in out or (x.get("updated") or "") >= (out[x["list"]].get("updated") or ""):
+            out[x["list"]] = x
+    return list(out.values())
+
+
+def apply_user_lists(con, rows):
+    """Replace every app-made list with the state's. A name that clashes with a repo list is skipped."""
+    con.execute("DELETE FROM lists WHERE list IN (SELECT list FROM list_meta WHERE made_by IS NOT NULL)")
+    con.execute("DELETE FROM list_meta WHERE made_by IS NOT NULL")
+    films = {r[0] for r in con.execute("SELECT tconst FROM films")}
+    for x in merge_user_lists(rows, []):   # newest per name, whatever the input
+        if con.execute("SELECT 1 FROM list_meta WHERE list=?", (x["list"],)).fetchone():
+            continue
+        con.execute("INSERT INTO list_meta (list,category,made_by,source,created,updated,deleted) VALUES (?,?,?,'',?,?,?)",
+                    (x["list"], x.get("category") or "Mine", x.get("made_by") or DEFAULT_CURATOR, x.get("created") or x.get("updated"),
+                     x.get("updated"), 1 if x.get("deleted") else 0))
+        if x.get("deleted"):
+            continue
+        rank = 0
+        for t in x.get("items", []):
+            if t not in films and not add_from_pool(con, t, "list"):
+                continue
+            films.add(t); rank += 1
+            con.execute("INSERT OR IGNORE INTO lists (list,rank,tconst) VALUES (?,?,?)", (x["list"], rank, t))
+
+
+def user_lists(con):
+    """Lists made in the app (and tombstones of deleted ones), in the shape the private state carries."""
+    out = []
+    for name, cat, by, created, updated, deleted in con.execute(
+            "SELECT list, category, made_by, created, updated, deleted FROM list_meta WHERE made_by IS NOT NULL ORDER BY list").fetchall():
+        items = [r[0] for r in con.execute("SELECT tconst FROM lists WHERE list=? ORDER BY rank", (name,))]
+        out.append({"list": name, "category": cat, "made_by": by, "created": created,
+                    "updated": updated, "deleted": deleted or 0, "items": [] if deleted else items})
+    return out
 
 
 if __name__ == "__main__":

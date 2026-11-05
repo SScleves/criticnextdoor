@@ -13,7 +13,7 @@ Env: FILMCAT_STATE_REPO (ssh url), FILMCAT_STATE_DIR (default ./state)
 """
 import argparse, json, os, sqlite3, subprocess, sys, time
 
-from app import DB, add_from_pool, write_exports
+from app import DB, add_from_pool, apply_user_lists, merge_user_lists, user_lists, write_exports
 from setup import migrate, SCALE_NAMES, TIERS
 TIERS_BY_SCORE = {t[1]: t[0] for t in TIERS}
 
@@ -48,7 +48,8 @@ def collect(con):
             "queue": [dict(zip(("curator", "tconst", "added"), r)) for r in con.execute("SELECT curator, tconst, added FROM queue")],
             "pairs": [dict(zip(("ts", "a", "b", "winner", "skipped", "curator", "reason"), r)) for r in con.execute("SELECT ts,a,b,winner,skipped,curator,reason FROM pairs")],
             "events": [dict(zip(("ts", "kind", "tconst", "payload", "source", "curator"), r)) for r in con.execute("SELECT ts,kind,tconst,payload,source,curator FROM events")],
-            "added": [dict(zip(("tconst", "added"), r)) for r in con.execute("SELECT tconst, added FROM films WHERE added IS NOT NULL AND added<>'filter'")]}
+            "added": [dict(zip(("tconst", "added"), r)) for r in con.execute("SELECT tconst, added FROM films WHERE added IS NOT NULL AND added<>'filter'")],
+            "lists": user_lists(con)}
 
 
 def merge(a, b):
@@ -75,7 +76,8 @@ def merge(a, b):
             "queue": uniq(a.get("queue", []) + b.get("queue", []), lambda x: (x["curator"], x["tconst"])),
             "pairs": uniq(a.get("pairs", []) + b.get("pairs", []), lambda p: (p.get("curator"), p["a"], p["b"], p["ts"])),
             "events": uniq(a.get("events", []) + b.get("events", []), lambda e: (e["ts"], e["kind"], e.get("tconst"), e.get("curator"), e.get("payload"))),
-            "added": uniq(a.get("added", []) + b.get("added", []), lambda x: x["tconst"])}
+            "added": uniq(a.get("added", []) + b.get("added", []), lambda x: x["tconst"]),
+            "lists": merge_user_lists(a.get("lists", []), b.get("lists", []))}
 
 
 def apply(con, s):
@@ -120,6 +122,7 @@ def apply(con, s):
         con.execute("INSERT INTO pairs (ts,a,b,winner,skipped,curator,reason) VALUES (?,?,?,?,?,?,?)", (p["ts"], p["a"], p["b"], p.get("winner"), p.get("skipped", 0), p.get("curator"), p.get("reason")))
     for e in s.get("events", []):
         con.execute("INSERT INTO events (ts,kind,tconst,payload,source,curator) VALUES (?,?,?,?,?,?)", (e["ts"], e["kind"], e.get("tconst"), e.get("payload"), e.get("source"), e.get("curator")))
+    apply_user_lists(con, s.get("lists", []))
     con.commit()
 
 

@@ -171,6 +171,58 @@
   .dl.open .menu{display:block} .dl .menu a{display:block;padding:6px 10px;color:var(--fg);text-decoration:none;font-size:13px;white-space:nowrap} .dl .menu a:hover{background:var(--bg)}
   .lists-bar{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
   .lists-bar b{color:var(--fg)}
+
+  /* ---- lists page ---- */
+  .lp-head{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .lp-tabs{display:flex;gap:4px;flex-wrap:wrap}
+  .lp-tabs button{border-radius:16px;padding:5px 12px;font-size:13px}
+  .lp-tabs button .n{color:var(--mute);font-size:11px;margin-left:4px}
+  .lp-tabs button.on{background:var(--fg);color:#111;border-color:var(--fg)} .lp-tabs button.on .n{color:#444}
+  .lp-head .grow{flex:1}
+  .lp-sec{margin:18px 0 8px;display:flex;align-items:baseline;gap:10px}
+  .lp-sec h2{font-size:15px;margin:0;letter-spacing:.3px} .lp-sec span{color:var(--mute);font-size:12px}
+  .lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+  .lcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;display:flex;flex-direction:column;gap:7px;min-width:0}
+  .lcard:hover{border-color:#4a4a55}
+  .lcard .t{font-weight:700;font-size:15px;line-height:1.25;overflow-wrap:anywhere}
+  .lcard .s{font-size:12px;color:var(--mute)}
+  .lcard .made{font-size:11px;font-weight:600;color:var(--who);border:1px solid var(--who);border-radius:9px;padding:0 6px;margin-left:4px;white-space:nowrap}
+  .lbar{height:6px;border-radius:3px;background:var(--bg);overflow:hidden;position:relative}
+  .lbar i{position:absolute;left:0;top:0;bottom:0;background:var(--who);opacity:.35} .lbar b{position:absolute;left:0;top:0;bottom:0;background:var(--who)}
+  .lnum{font-size:12px;color:var(--mute)} .lnum b{color:var(--who);font-weight:600}
+  .lact{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px} .lact button{font-size:12px;padding:4px 9px}
+  .lact .sure{border-color:var(--neg);color:var(--neg)}
+  .dgrid{border-collapse:separate;border-spacing:4px;font-size:13px;width:100%;max-width:980px}
+  .dgrid th{color:var(--mute);font-weight:500;text-align:left;padding:2px 6px;white-space:nowrap}
+  .dgrid td{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:6px 8px;cursor:pointer;min-width:84px;vertical-align:top}
+  .dgrid td:hover{border-color:#4a4a55} .dgrid td.empty{background:none;border:none;cursor:default}
+  .dgrid td .v{font-variant-numeric:tabular-nums} .dgrid td .v b{color:var(--who)}
+  .dgrid td .lbar{height:4px;margin-top:4px}
+  .lists-bar .go{display:flex;gap:6px;margin-left:auto}
+  .dwrap{overflow-x:auto;max-width:100%}
+  .modes{flex-wrap:wrap}
+  @media (max-width:600px){ .lgrid{grid-template-columns:1fr} .lp-head .grow{display:none} #lp-q{flex:1;min-width:0} }
+  /* ---- list editor ---- */
+  .led{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:12;overflow:auto;padding:14px;display:none}
+  .led.open{display:block}
+  .led-box{max-width:860px;margin:10px auto;background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--who);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+  .led-box h2{margin:0;font-size:18px;display:flex;align-items:center;gap:10px} .led-box h2 button{margin-left:auto}
+  .led-row{display:flex;gap:8px;flex-wrap:wrap} .led-row input{flex:1;min-width:200px} #led-cat{flex:0 1 200px;min-width:140px}
+  #led-paste{min-height:120px;resize:vertical;width:100%;font-size:14px;line-height:1.45}
+  .led-hint{font-size:12px;color:var(--mute);line-height:1.4}
+  .led-items{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+  .li{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 2px;border-bottom:1px solid var(--line);font-size:14px}
+  .li .r{color:var(--mute);text-align:right;font-variant-numeric:tabular-nums;font-size:12px}
+  .li .src{font-size:11px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .li .m b{font-weight:600} .li .m span{color:var(--mute);font-size:12px}
+  .li.miss{background:rgba(217,83,79,.08)} .li.miss .m{color:var(--neg)}
+  .li .b{display:flex;gap:3px} .li .b button{padding:2px 7px;font-size:12px}
+  .find{position:relative} .find input{width:100%}
+  .find .res{position:absolute;left:0;right:0;top:100%;z-index:3;background:var(--panel2);border:1px solid var(--line);border-radius:6px;max-height:260px;overflow:auto}
+  .find .res div{padding:6px 9px;cursor:pointer;font-size:13px} .find .res div:hover,.find .res div.on{background:var(--bg)}
+  .find .res span{color:var(--mute)}
+  .led-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .led-foot .msg{color:var(--mute);font-size:13px;margin-right:auto}
+  .led-foot .err{color:var(--neg)}
 </style>
 </head>
 <body>
@@ -179,6 +231,7 @@
   <div class="who" id="who" title="who is marking · drag a poster onto a name to put it in that person's to-write queue"></div>
   <div class="modes">
     <button data-m="browse" title="the grid: click a poster, write it up">browse</button>
+    <button data-m="lists" title="every list by shelf, how far each of you is, and make your own">lists</button>
     <button data-m="triage" title="one film at a time, keyboard: S W N → ←">triage</button>
     <button data-m="compare" title="which did you like more? ← → ↓">compare</button>
     <button data-m="ladder" title="order the films at one score">ladder</button>
@@ -241,12 +294,13 @@
 <main id="main"></main>
 
 <div class="ov" id="ov"><div class="sheet" id="sheet"></div></div>
+<div class="led" id="led"><div class="led-box" id="led-box"></div></div>
 
-<script src="shim.js?v=b291eb01"></script>
+<script src="shim.js?v=0bab0665"></script>
 <script>
 const IMG = "https://image.tmdb.org/t/p/w342";
-const MODES = ["browse","triage","compare","ladder","progress","tags","foryou"];
-let META, LISTS = [], state = {mode:"browse", offset:0, films:[], total:0, i:0, pair:null, pairs:0, ladderScore:null, progTab:"genre", sameTier:false, pairScore:"", picked:null};
+const MODES = ["browse","lists","triage","compare","ladder","progress","tags","foryou"];
+let META, LISTS = [], state = {listTab: (()=>{ try { return localStorage.getItem("listTab") || "All"; } catch { return "All"; } })(), mode:"browse", offset:0, films:[], total:0, i:0, pair:null, pairs:0, ladderScore:null, progTab:"genre", sameTier:false, pairScore:"", picked:null};
 let current = null, advance = false, saveTimer = null, dirty = false, curator = localStorage.getItem("curator") || "";
 
 const $ = s => document.querySelector(s);
@@ -286,7 +340,8 @@ async function loadMeta(){
   $("#tag").innerHTML = `<option value="">any tag</option>` + META.tags.filter(t=>t.pos+t.neg).map(t=>`<option value="${esc(t.name)}">${esc(t.name)} (${t.pos+t.neg})</option>`).join("");
   $("#genre").value = g; $("#decade").value = d; $("#score").value = ti; $("#tag").value = ta; $("#label").value = la; $("#feeling").value = fe;
   const l = $("#lst").value, L = await api("/api/lists"); LISTS = L.lists;
-  $("#lst").innerHTML = `<option value="">any list</option>` + LISTS.map(x=>`<option value="${esc(x.list)}">${esc(x.list)} · seen ${x.by[curator]?.seen||0}/${x.total}</option>`).join("");
+  $("#lst").innerHTML = `<option value="">any list</option>` + shelves().map(([cat, ls]) => `<optgroup label="${esc(cat)}">` +
+    ls.map(x=>`<option value="${esc(x.list)}">${esc(x.list)} · seen ${x.by[curator]?.seen||0}/${x.total}</option>`).join("") + `</optgroup>`).join("");
   $("#lst").value = l;
   const s = META.stats; state.pairs = s.pairs;
   $("#stats").innerHTML = `<b>${s.seen}</b> seen · <b>${s.tiered}</b> scored · <b>${s.felt}</b> felt · <b>${s.noted}</b> noted · <b>${s.pairs}</b> compared · <b>${s.want}</b> want · ${s.total} total`;
@@ -328,10 +383,10 @@ function setMode(m, push=true){
   if (!MODES.includes(m)) m = "browse";
   state.mode = m;
   document.querySelectorAll(".modes button").forEach(b => b.classList.toggle("on", b.dataset.m === m));
-  $("#filters").style.display = ["compare","ladder","progress","tags"].includes(m) ? "none" : "";
+  $("#filters").style.display = ["compare","ladder","progress","tags","lists"].includes(m) ? "none" : "";
   if (push && location.hash !== "#"+m) history.replaceState(null, "", "#"+m);
   if (m === "compare") loadPair(); else if (m === "foryou") loadForYou(); else if (m === "ladder") loadLadder();
-  else if (m === "progress") loadProgress(); else if (m === "tags") renderTags(); else render();
+  else if (m === "progress") loadProgress(); else if (m === "tags") renderTags(); else if (m === "lists") loadListsPage(); else render();
 }
 function route(){
   const h = location.hash.slice(1);
@@ -370,7 +425,8 @@ function listsBar(){
   const L = LISTS.find(x=>x.list===name); if (!L) return "";
   return `<div class="lists-bar"><b>${esc(name)}</b> · ${L.total} films` + META.curators.map(c => { const b = L.by[c.id]||{};
     return `<span class="c-${c.id}"><b style="color:var(--who)">${esc(c.name)}</b>: ${b.seen||0} seen · ${b.tiered||0} scored · ${b.noted||0} noted · ${b.want||0} want · ${b.queued||0} to write${b.avg_score!=null?` · avg ${signed(b.avg_score)}`:""}</span>`; }).join("") +
-    `<span style="margin-left:auto;color:var(--mute)">everyone's marks show on the cards</span></div>`;
+    `<span class="go">${L.next?.[curator] ? `<button class="primary" data-next="${esc(name)}" title="the first film on this list ${esc(curName(curator))} hasn't marked">next to mark →</button>` : `<span style="color:var(--mute)">all marked ✓</span>`}
+      ${L.made_by ? `<button data-ledit="${esc(name)}">edit list</button>` : ""}<button data-m-go="lists">all lists</button></span></div>`;
 }
 
 function renderGrid(){
@@ -900,6 +956,7 @@ async function done(){
   if (dirty) await save();
   const adv = advance; closeSheet();
   if (adv && state.mode === "triage") next(); else render();
+  if ($("#lst").value && state.mode === "browse") api("/api/lists").then(r => { LISTS = r.lists; if (state.mode === "browse" && !current) render(); });   // the list bar's counts and "next"
 }
 
 async function step(d){
@@ -917,8 +974,202 @@ function closeSheet(){
   render();
 }
 
+
+// ---- lists: shelves, the Lists page, and making your own -------------------------------
+const SHELF_ORDER = ["Mine", "Canon", "Awards", "Genre", "Letterboxd", "By decade"];
+const DECADE_RE = /^(.*) · (\d{4})s$/;
+function shelves(ls = LISTS){
+  const by = new Map();
+  for (const x of ls) { const c = x.category || "Canon"; by.has(c) || by.set(c, []); by.get(c).push(x); }
+  const custom = [...by.keys()].filter(c => !SHELF_ORDER.includes(c)).sort();
+  const order = ["Mine", ...custom, ...SHELF_ORDER.slice(1)].filter(c => by.has(c));
+  return order.map(c => [c, by.get(c).sort((a, b) => {
+    const da = a.list.match(DECADE_RE), dbb = b.list.match(DECADE_RE);
+    return da && dbb ? (da[1].localeCompare(dbb[1]) || da[2] - dbb[2]) : a.list.localeCompare(b.list); })]);
+}
+const pct = (n, t) => t ? Math.round(100 * n / t) : 0;
+function lbar(L, c){ const b = L.by[c] || {}; return `<div class="lbar c-${c}" title="${esc(curName(c))}: ${b.seen||0} seen, ${b.marked||0} marked of ${L.total}"><i style="width:${pct(b.marked||0, L.total)}%"></i><b style="width:${pct(b.seen||0, L.total)}%"></b></div>`; }
+
+async function loadListsPage(){ LISTS = (await api("/api/lists")).lists; renderListsPage(); }
+function renderListsPage(){
+  if (state.mode !== "lists") return;
+  const tab = state.listTab || "All", qy = (state.listQ || "").toLowerCase(), sort = state.listSort || "shelf";
+  const all = shelves(), counts = Object.fromEntries(all.map(([c, ls]) => [c, ls.length]));
+  const match = x => !qy || x.list.toLowerCase().includes(qy);
+  const done = x => (x.by[curator]?.marked || 0) / (x.total || 1);
+  const sorter = {shelf: null, most: (a, b) => done(b) - done(a), least: (a, b) => done(a) - done(b), size: (a, b) => b.total - a.total, az: (a, b) => a.list.localeCompare(b.list)}[sort];
+  let body = "";
+  for (const [cat, ls0] of all) {
+    if (tab !== "All" && tab !== cat) continue;
+    let ls = ls0.filter(match); if (!ls.length) continue;
+    if (sorter) ls = [...ls].sort(sorter);
+    const head = `<div class="lp-sec"><h2>${esc(cat)}</h2><span>${ls.length} list${ls.length>1?"s":""}${cat==="By decade"?" · computed from IMDb: the 40 best per genre and decade, weighted by votes":""}${cat==="Mine"?" · made here by you two":""}</span></div>`;
+    body += head + (cat === "By decade" && !qy && !sorter ? `<div class="dwrap">${decadeGrid(ls)}</div>` : `<div class="lgrid">${ls.map(listCard).join("")}</div>`);
+  }
+  $("#main").innerHTML = `<div class="lp-head">
+      <div class="lp-tabs">${["All", ...all.map(x=>x[0])].map(c => `<button data-ltab="${esc(c)}" class="${c===tab?"on":""}">${esc(c)}<span class="n">${c==="All"?LISTS.length:counts[c]}</span></button>`).join("")}</div>
+      <span class="grow"></span>
+      <input type="search" id="lp-q" placeholder="find a list" value="${esc(state.listQ||"")}">
+      <select id="lp-sort">${[["shelf","shelf order"],["least","least done first"],["most","most done first"],["size","biggest first"],["az","A → Z"]].map(([v,t])=>`<option value="${v}" ${v===sort?"selected":""}>${t}</option>`).join("")}</select>
+      <button class="primary" id="lp-new">+ new list</button>
+    </div>` + (body || `<div class="center">no list matches “${esc(state.listQ||"")}”</div>`);
+  const qi = $("#lp-q"); let t; qi.oninput = () => { clearTimeout(t); t = setTimeout(() => { state.listQ = qi.value; renderListsPage(); const n = $("#lp-q"); n.focus(); n.setSelectionRange(n.value.length, n.value.length); }, 200); };
+  $("#lp-sort").onchange = e => { state.listSort = e.target.value; renderListsPage(); };
+}
+function listCard(L){
+  const made = L.made_by ? `<span class="made c-${esc(L.made_by)}">by ${esc(curName(L.made_by))}</span>` : "";
+  const nums = META.curators.map(c => { const b = L.by[c.id] || {};
+    return `${lbar(L, c.id)}<div class="lnum c-${c.id}"><b>${esc(c.name)}</b> ${b.seen||0} seen · ${b.marked||0}/${L.total} marked${b.avg_score!=null?` · avg ${signed(b.avg_score)}`:""}</div>`; }).join("");
+  const nx = L.next?.[curator];
+  return `<div class="lcard" data-open="${esc(L.list)}">
+    <div class="t">${esc(L.list)}${made}</div>
+    <div class="s">${L.total} films${L.source?` · ${esc(L.source)}`:""}</div>
+    ${nums}
+    <div class="lact">${nx ? `<button data-next="${esc(L.list)}">next to mark →</button>` : `<span class="s">all marked ✓</span>`}
+      ${L.made_by ? `<button data-ledit="${esc(L.list)}">edit</button><button data-ldel="${esc(L.list)}">delete</button>` : ""}</div>
+  </div>`;
+}
+function decadeGrid(ls){
+  const rows = new Map(), decs = new Set();
+  for (const L of ls) { const m = L.list.match(DECADE_RE); if (!m) continue; rows.has(m[1]) || rows.set(m[1], {}); rows.get(m[1])[m[2]] = L; decs.add(m[2]); }
+  const cols = [...decs].sort();
+  return `<table class="dgrid"><tr><th></th>${cols.map(d=>`<th>${d}s</th>`).join("")}</tr>` +
+    [...rows].map(([g, cells]) => `<tr><th>${esc(g)}</th>${cols.map(d => { const L = cells[d]; if (!L) return `<td class="empty"></td>`;
+      const b = L.by[curator] || {};
+      return `<td data-open="${esc(L.list)}" title="${esc(L.list)}"><div class="v"><b>${b.seen||0}</b>/${L.total}</div>${META.curators.map(c=>lbar(L, c.id)).join("")}</td>`; }).join("")}</tr>`).join("") + `</table>`;
+}
+function openList(name, sortRank = true){
+  $("#lst").value = name; if (sortRank) $("#sort").value = "rank";
+  setMode("browse"); window.scrollTo(0, 0); load();
+}
+async function nextInList(name){
+  LISTS = (await api("/api/lists")).lists;
+  const L = LISTS.find(x => x.list === name), t = L?.next?.[curator];
+  if (!t) { renderListsPage(); return; }
+  if ($("#lst").value !== name || state.mode !== "browse") { $("#lst").value = name; $("#sort").value = "rank"; setMode("browse"); await load(); }
+  openFilm(t);
+}
+async function deleteList(btn){
+  if (!btn.classList.contains("sure")) { btn.classList.add("sure"); btn.textContent = "sure? delete"; setTimeout(() => { btn.classList.remove("sure"); btn.textContent = "delete"; }, 3000); return; }
+  await api("/api/list/delete", {name: btn.dataset.ldel});
+  if ($("#lst").value === btn.dataset.ldel) $("#lst").value = "";
+  await loadMeta(); renderListsPage();
+}
+
+// the editor: paste, match, fix the misses, save
+let LED = null;
+async function openListEditor(name){
+  LED = {old: name || "", name: name || "", cat: "Mine", items: [], err: "", busy: false};
+  if (name) { const r = await api("/api/list?name=" + encodeURIComponent(name)); LED.cat = r.category; LED.items = r.items.filter(Boolean).map(f => ({line: "", film: f})); }
+  $("#led").classList.add("open"); renderEditor(); (name ? $("#led-paste") : $("#led-name")).focus();
+}
+function closeEditor(){ LED = null; $("#led").classList.remove("open"); $("#led-box").innerHTML = ""; }
+function renderEditor(){
+  if (!LED) return;
+  const cats = [...new Set(["Mine", ...LISTS.filter(x=>x.made_by).map(x=>x.category)])];
+  const ok = LED.items.filter(i=>i.film).length, miss = LED.items.length - ok;
+  $("#led-box").innerHTML = `
+    <h2>${LED.old ? "Edit list" : "New list"}<button id="led-x" title="Esc">×</button></h2>
+    <div class="led-row"><input type="text" id="led-name" placeholder="name: Paola's Sunday cry, Halloween 2026, Best of Cannes…" value="${esc(LED.name)}" maxlength="120">
+      <input type="text" id="led-cat" list="led-cats" placeholder="shelf" value="${esc(LED.cat)}" title="the shelf it sits on in the Lists page; type a new one to make it"><datalist id="led-cats">${cats.map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
+    <textarea id="led-paste" placeholder="Paste titles, one per line, then “match”. Any of these work:
+The Godfather (1972)
+12. Psycho 1960
+Three Colours: Red, 1994
+https://www.imdb.com/title/tt0081505/
+a CSV with Name and Year columns, or a page where the year sits under each title">${esc(LED.paste||"")}</textarea>
+    <div class="led-row" style="align-items:center"><button id="led-match" class="primary">match ↓</button>
+      <span class="led-hint">Years make it exact; without one it takes the best-known film with that title. Matching adds to the list below, in order. Ctrl+Enter = match.</span></div>
+    <div class="led-items">${LED.items.map(itemRow).join("")}</div>
+    <div class="find" id="led-add"><input type="text" placeholder="+ add a film by title" data-find="add"><div class="res"></div></div>
+    <div class="led-foot"><span class="msg">${LED.err ? `<span class="err">${esc(LED.err)}</span>` : `${ok} film${ok===1?"":"s"}${miss ? ` · <span class="err">${miss} line${miss>1?"s":""} not matched (fix them, or they're left out)</span>` : ""}`}</span>
+      ${miss ? `<button id="led-drop">drop unmatched</button>` : ""}<button id="led-cancel">cancel</button><button class="primary" id="led-save" ${(ok||(LED.paste||"").trim())&&!LED.busy?"":"disabled"}>save list</button></div>`;
+}
+function itemRow(it, i){
+  const f = it.film, src = it.line && (!f || it.line !== `${f.title} (${f.year})`) ? `<div class="src">${esc(it.line)}</div>` : "";
+  const main = it.finding ? `<div class="find"><input type="text" data-find="${i}" value="${esc(it.q||"")}" placeholder="type a title"><div class="res"></div></div>`
+    : f ? `<div class="m"><b>${esc(f.title)}</b> <span>${f.year||""}${f.directors?` · ${esc(f.directors.split(",")[0])}`:""}${f.votes?` · ${(f.votes/1000|0)}k votes`:""}</span></div>`
+    : `<div class="m">no match</div>`;
+  return `<div class="li ${f?"":"miss"}" data-i="${i}"><span class="r">${i+1}</span><div>${main}${src}</div>
+    <div class="b">${it.finding ? `<button data-li="cancel">back</button>` : `<button data-li="find" title="pick the right film">${f?"change":"find"}</button>`}<button data-li="up" title="move up">↑</button><button data-li="down" title="move down">↓</button><button data-li="rm" title="remove">×</button></div></div>`;
+}
+const keepEditorFields = () => { if (!LED) return; LED.name = $("#led-name")?.value ?? LED.name; LED.cat = $("#led-cat")?.value ?? LED.cat; LED.paste = $("#led-paste")?.value ?? ""; };
+async function matchPaste(){
+  keepEditorFields(); const text = (LED.paste || "").trim(); if (!text || LED.matching) return;
+  LED.matching = true; $("#led-match").disabled = true; $("#led-match").textContent = "matching…"; $("#led-save").disabled = true;
+  try { const r = await api("/api/list/resolve", {text});
+    LED.items.push(...r.items.map(it => ({line: it.line, film: it.film, q: it.title || ""}))); LED.paste = ""; LED.err = ""; }
+  catch (e) { LED.err = e.message; }
+  LED.matching = false; renderEditor();
+}
+let findT;
+async function runFind(inp){
+  clearTimeout(findT); const res = inp.parentElement.querySelector(".res"), qv = inp.value.trim();
+  if (qv.length < 2) { res.innerHTML = ""; return; }
+  findT = setTimeout(async () => {
+    const r = await api("/api/pool?all=1&limit=12&q=" + encodeURIComponent(qv)); LED._found = r.films;
+    res.innerHTML = r.films.map((f, k) => `<div data-pickfilm="${k}" class="${k?"":"on"}"><b>${esc(f.title)}</b> <span>${f.year||""} · ${esc((f.directors||"").split(",")[0])} · ${(f.votes/1000|0)}k votes</span></div>`).join("")
+      || `<div><span>nothing with ≥1000 IMDb votes</span></div>`;
+  }, 200);
+}
+function pickFilm(inp, k){
+  const f = LED._found?.[k]; if (!f) return;
+  keepEditorFields();
+  if (inp.dataset.find === "add") LED.items.push({line: "", film: f});
+  else Object.assign(LED.items[+inp.dataset.find], {film: f, finding: false});
+  renderEditor(); (inp.dataset.find === "add" ? $('#led-add input') : null)?.focus();
+}
+async function saveEditor(){
+  keepEditorFields();
+  if ((LED.paste || "").trim()) {   // pasted but not matched yet: match, and save only if every line found its film
+    await matchPaste(); if (LED.err) return;
+    const miss = LED.items.filter(i=>!i.film).length;
+    if (miss) { LED.err = `${miss} line${miss>1?"s":""} didn't match: fix or drop ${miss>1?"them":"it"}, then save`; renderEditor(); return; }
+  }
+  const items = LED.items.filter(i=>i.film).map(i=>i.film.tconst);
+  if (!LED.name.trim()) { LED.err = "give the list a name"; renderEditor(); $("#led-name").focus(); return; }
+  LED.busy = true; renderEditor();
+  try { const r = await api("/api/list", {name: LED.name, category: LED.cat || "Mine", items, old_name: LED.old});
+    closeEditor(); await loadMeta(); openList(r.list); }
+  catch (e) { LED.busy = false; LED.err = e.message; renderEditor(); }
+}
+$("#led").onclick = e => {
+  if (!LED) return;
+  if (e.target.id === "led" || e.target.id === "led-x" || e.target.id === "led-cancel") { closeEditor(); return; }
+  if (e.target.id === "led-match") { matchPaste(); return; }
+  if (e.target.id === "led-save") { saveEditor(); return; }
+  if (e.target.id === "led-drop") { keepEditorFields(); LED.items = LED.items.filter(i=>i.film); renderEditor(); return; }
+  const pf = e.target.closest("[data-pickfilm]"); if (pf) { pickFilm(pf.closest(".find").querySelector("input"), +pf.dataset.pickfilm); return; }
+  const b = e.target.closest("[data-li]"); if (!b) return;
+  keepEditorFields();
+  const i = +b.closest(".li").dataset.i, it = LED.items[i], a = b.dataset.li;
+  if (a === "rm") LED.items.splice(i, 1);
+  else if (a === "up" && i > 0) [LED.items[i-1], LED.items[i]] = [LED.items[i], LED.items[i-1]];
+  else if (a === "down" && i < LED.items.length - 1) [LED.items[i+1], LED.items[i]] = [LED.items[i], LED.items[i+1]];
+  else if (a === "find") { it.finding = true; it.q = it.q || it.film?.title || it.line; }
+  else if (a === "cancel") it.finding = false;
+  renderEditor();
+  if (a === "find") { const inp = $(`[data-find="${i}"]`); inp.focus(); runFind(inp); }
+};
+$("#led").addEventListener("input", e => { const inp = e.target.closest("[data-find]"); if (inp) { if (inp.dataset.find !== "add") LED.items[+inp.dataset.find].q = inp.value; runFind(inp); } });
+$("#led").addEventListener("keydown", e => {
+  if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeEditor(); return; }
+  if (e.target.id === "led-paste" && e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); matchPaste(); return; }
+  const inp = e.target.closest("[data-find]"); if (!inp) return;
+  const rows = [...inp.parentElement.querySelectorAll("[data-pickfilm]")], on = rows.findIndex(r => r.classList.contains("on"));
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); const n = Math.max(0, Math.min(rows.length - 1, on + (e.key === "ArrowDown" ? 1 : -1))); rows.forEach((r, k) => r.classList.toggle("on", k === n)); }
+  if (e.key === "Enter" && rows.length) { e.preventDefault(); pickFilm(inp, +rows[Math.max(0, on)].dataset.pickfilm); }
+}, true);
+
 // ---- wiring ------------------------------------------------------------------
 $("#main").onclick = e => {
+  const nx = e.target.closest("[data-next]"); if (nx) { nextInList(nx.dataset.next); return; }
+  const le = e.target.closest("[data-ledit]"); if (le) { openListEditor(le.dataset.ledit); return; }
+  const ld = e.target.closest("[data-ldel]"); if (ld) { deleteList(ld); return; }
+  const lt = e.target.closest("[data-ltab]"); if (lt) { state.listTab = lt.dataset.ltab; try { localStorage.setItem("listTab", state.listTab); } catch {} renderListsPage(); return; }
+  if (e.target.id === "lp-new") { openListEditor(); return; }
+  const mg = e.target.closest("[data-m-go]"); if (mg) { setMode(mg.dataset.mGo); return; }
+  const op = e.target.closest("[data-open]"); if (op) { openList(op.dataset.open); return; }
   const pk = e.target.closest("[data-pick]"); if (pk) { pick(pk.dataset.pick); return; }
   const k = e.target.closest("[data-k]"); if (k) { triage(k.dataset.k); return; }
   const qk = e.target.closest("[data-qk]"); if (qk) { queueFromTriage(qk.dataset.qk); return; }
@@ -938,6 +1189,7 @@ $("#dl").onclick = e => { if (e.target.tagName === "BUTTON") $("#dl").classList.
 document.addEventListener("click", e => { if (!e.target.closest("#dl")) $("#dl").classList.remove("open"); });
 $("#ov").onclick = e => { if (e.target.id==="ov") done(); };
 document.onkeydown = e => {
+  if (LED) { if (e.key === "Escape") { e.preventDefault(); closeEditor(); } return; }   // the list editor handles its own keys
   const tag = e.target.tagName, typing = ["INPUT","TEXTAREA","SELECT"].includes(tag);
   if (current) {
     if (e.key === "Escape") { e.preventDefault(); done(); return; }

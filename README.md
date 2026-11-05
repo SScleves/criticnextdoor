@@ -124,7 +124,18 @@ with at least 25 000 votes. Re-run it after a catalogue refresh.
 To add one: paste the list page into a chat with Claude and ask for a `lists/` file, or drop a CSV in `lists/` (the Letterboxd snippet in `tools/`
 makes one from any Letterboxd list page) and run `lists.py all` again.
 
-Lists show up as a filter ("IMDb Top 250 · seen 40/250 · avg 6.2"), as a sort ("by list rank"),
+**The Lists page** (`#lists`) is the way in: every list on a shelf (Mine, your own shelves, Canon,
+Awards, Genre, Letterboxd, By decade), each card with both your progress bars (solid = seen,
+faint = marked), averages, and **next to mark →**, which opens the first film by rank you haven't
+marked. "By decade" is a genre × decade grid. Click a card to browse that list in rank order.
+
+**Make a list in the app:** *+ new list*, give it a name and a shelf, paste titles (one per line;
+`Title (Year)`, `12. Title 1999`, `Title, 1999`, IMDb links, a `Name,Year` CSV, or a page where the
+year sits under each title), *match*, fix any red line with *find*, reorder with ↑↓, save. Lists
+made here are private like your marks: they travel in `state.json`, so the other phone and the media
+server get them; the newest edit (or deletion) of a list wins. Repo lists can't be edited here.
+
+Lists also show up as a filter (grouped by shelf), as a sort ("by list rank"),
 on each card, and as a boost in *for you*. Letterboxd blocks automated reads of other people's
 lists, so for those: your own export, or copy the list into a `Name,Year` CSV.
 
