@@ -15,7 +15,7 @@ Usage:
     python setup.py
     python setup.py --min-votes 50000 --min-rating 6.5
 """
-import argparse, csv, gzip, json, os, sqlite3, time, urllib.request
+import argparse, csv, gzip, json, os, re, sqlite3, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = "https://datasets.imdbws.com/"
@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS lists (       -- external top lists: IMDb Top 250, TS
   PRIMARY KEY (list, tconst)
 );
 CREATE INDEX IF NOT EXISTS idx_lists_tconst ON lists(tconst);
+CREATE TABLE IF NOT EXISTS list_meta (   -- what kind of list it is, and who made it (NULL = from the repo / computed)
+  list TEXT PRIMARY KEY, category TEXT, made_by TEXT, source TEXT,
+  created TEXT DEFAULT (datetime('now')), updated TEXT DEFAULT (datetime('now')), deleted INTEGER DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS tiers (name TEXT PRIMARY KEY, score INTEGER, ord INTEGER);
 CREATE TABLE IF NOT EXISTS tags (name TEXT PRIMARY KEY, grp TEXT);   -- "why it reached you": per curator, per film
 CREATE TABLE IF NOT EXISTS curators (id TEXT PRIMARY KEY, name TEXT, ord INTEGER);
@@ -185,6 +189,23 @@ TAGS = [  # starter vocabulary, one group per angle a film can reach you from; a
 ]
 
 
+LIST_CATEGORIES = ["Mine", "Canon", "Awards", "Genre", "Letterboxd", "By decade"]   # the order the Lists page shows them in
+
+
+def list_category(name):
+    """A loaded list's shelf on the Lists page, from its name. Lists you make pick their own."""
+    n = name.lower()
+    if re.search(r" · \d{4}s$", name):
+        return "By decade"
+    if n.startswith("lb: "):
+        return "Letterboxd"
+    if re.search(r"oscar|academy award|palme|bafta|golden (globe|lion|bear)|cannes", n):
+        return "Awards"
+    if re.search(r"horror|comed|funn|sci-?fi|science fiction|action|thriller|animat|western|musical|romanc|war film|documentar|noir|fantasy|crime", n):
+        return "Genre"
+    return "Canon"
+
+
 def migrate(con):
     """Create anything missing. Called by setup and by the app on start."""
     con.executescript(SCHEMA)
@@ -206,6 +227,8 @@ def migrate(con):
     # marks written before the scale: score from the tier name
     con.execute("UPDATE marks SET score=(SELECT t.score FROM tiers t WHERE t.name=marks.tier) WHERE score IS NULL AND tier IS NOT NULL")
     migrate_to_curators(con)
+    for (name,) in con.execute("SELECT DISTINCT list FROM lists WHERE list NOT IN (SELECT list FROM list_meta)").fetchall():
+        con.execute("INSERT INTO list_meta (list, category) VALUES (?,?)", (name, list_category(name)))
     con.commit()
 
 
