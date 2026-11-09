@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>something to watch</title>
+<style>
+  :root{--bg:#121214;--panel:#1b1b1f;--line:#2a2a30;--fg:#e8e6e1;--mute:#8d8a84;--acc:#e5b53d;--yes:#4caf7d;--no:#d9534f;--p:#c38bd9}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:17px;margin:0;color:var(--acc);letter-spacing:.5px;flex:1}
+  header a{color:var(--mute);font-size:13px;text-decoration:none}
+  main{max-width:560px;margin:0 auto;padding:18px 16px 90px}
+  h2{font-size:22px;margin:6px 0 4px}
+  .sub{color:var(--mute);margin:0 0 18px}
+  button{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:12px 16px;font:inherit;cursor:pointer}
+  button.primary{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+  button:disabled{opacity:.45;cursor:default}
+  input[type=text]{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font:inherit;width:100%}
+  .menu button{display:block;width:100%;text-align:left;margin:10px 0;padding:16px}
+  .menu button b{display:block;font-size:17px}
+  .menu button span{color:var(--mute);font-size:13px}
+  .menu button.off{opacity:.5}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{padding:9px 14px;border-radius:20px;border:1px solid var(--line);background:var(--panel);cursor:pointer;user-select:none;font-size:15px}
+  .chip.on{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+  .chip small{color:var(--mute);margin-left:4px}
+  .chip.on small{color:#333}
+  .q{margin:22px 0}
+  .q label{display:block;color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .who{display:flex;gap:8px;flex-wrap:wrap}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;justify-content:center}
+  .bar button{flex:1;max-width:260px}
+  /* card */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;position:relative}
+  .card .img{aspect-ratio:2/3;max-height:58vh;background:#26262c;display:flex;align-items:center;justify-content:center;color:var(--mute)}
+  .card .img img{width:100%;height:100%;object-fit:cover;display:block}
+  .card .body{padding:14px 16px}
+  .card h3{margin:0;font-size:20px}
+  .card .meta{color:var(--mute);font-size:13px;margin:4px 0 10px}
+  .card .ovw{font-size:14px;color:#c9c6bf;margin-bottom:10px;max-height:4.4em;overflow:hidden}
+  .why{font-size:14px;margin:6px 0;padding-left:10px;border-left:3px solid var(--acc)}
+  .why.p{border-color:var(--p)}
+  .why b{color:var(--acc)} .why.p b{color:var(--p)}
+  .labels{color:var(--p);font-size:13px;margin-top:6px}
+  .stamp{position:absolute;top:16px;font-size:28px;font-weight:800;padding:6px 14px;border:4px solid;border-radius:10px;transform:rotate(-12deg);opacity:0;transition:opacity .12s}
+  .stamp.yes{left:16px;color:var(--yes);border-color:var(--yes)} .stamp.no{right:16px;color:var(--no);border-color:var(--no);transform:rotate(12deg)}
+  .card.yes .stamp.yes,.card.no .stamp.no{opacity:1}
+  .swipe{display:flex;gap:12px;margin-top:14px}
+  .swipe button{flex:1;font-size:18px;padding:16px}
+  .swipe .no{border-color:var(--no);color:var(--no)} .swipe .yes{border-color:var(--yes);color:var(--yes)}
+  .count{color:var(--mute);font-size:13px;text-align:center;margin:8px 0}
+  .code{font-size:44px;letter-spacing:10px;font-weight:800;color:var(--acc);text-align:center;margin:10px 0}
+  .members{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .members span{padding:6px 12px;border-radius:14px;background:var(--panel);border:1px solid var(--line);font-size:14px}
+  .members span.done{border-color:var(--yes)}
+  .match{text-align:center}
+  .match .card{display:inline-block;max-width:340px;text-align:left}
+  .bot{margin-top:10px}
+  .bot textarea{width:100%;min-height:80px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:12px;font:inherit}
+  .bot .ans{white-space:pre-wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:10px;font-size:15px}
+  .muted{color:var(--mute);font-size:13px}
+  .err{color:var(--no)}
+</style>
+</head>
+<body>
+<header><h1>something to watch</h1><a href="./">catalogue</a></header>
+<main id="main"></main>
+
+<script src="shim.js?v=0bab0665"></script>
+<script>
+const IMG = "https://image.tmdb.org/t/p/w500";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const api = async (url, body, method) => {
+  const r = await fetch(url, body ? {method: method || "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)} : method ? {method} : undefined);
+  if (!r.ok) { let t = ""; try { t = (await r.json()).detail; } catch {} throw new Error(t || r.statusText || ("HTTP " + r.status)); }
+  return r.json();
+};
+const parts = (s, sep = ",") => String(s || "").split(sep).map(x => x.trim()).filter(Boolean);
+
+// ---- what a feeling points at, until the curators' own end-feelings cover the catalogue ----
+// label hits count most, then TMDB keywords, then IMDb genres. Edit freely: this is the taste-free first guess.
+const FEEL = {
+  wrecked:    {labels:["tearjerker","war","new-french-extremity","survival","period-drama"], genres:["Drama","War"], kw:["grief","death","tragedy","holocaust","loss","dying","terminal illness"]},
+  unsettled:  {labels:["psychological-horror","folk-horror","slow-burn","home-invasion","haunted-house","possession","serial-killer","found-footage"], genres:["Horror","Thriller"], kw:["paranoia","dread","isolation","cult","stalker"]},
+  hollow:     {labels:["dystopia","post-apocalyptic","slow-burn","cyberpunk"], genres:["Drama"], kw:["loneliness","existentialism","alienation","melancholy","nihilism"]},
+  shaken:     {labels:["political-thriller","survival","disaster","war","serial-killer","gangster"], genres:["Thriller","Crime"], kw:["based on true story","terrorism","hostage","corruption"]},
+  warm:       {labels:["coming-of-age","buddy","romcom","feel-good","family","animal-tale"], genres:["Romance","Family","Comedy"], kw:["friendship","family","love","kindness","small town"]},
+  giddy:      {labels:["romcom","musical","heist","superhero","martial-arts","adventure"], genres:["Comedy","Adventure","Action","Musical"], kw:["party","dance","adventure","road trip","fun"]},
+  cosy:       {labels:["animal-tale","family","fantasy-quest","christmas","feel-good"], genres:["Animation","Family","Fantasy"], kw:["christmas","village","cooking","magic","childhood"]},
+  moved:      {labels:["tearjerker","biopic","coming-of-age","period-drama"], genres:["Drama","Biography","Romance"], kw:["love","sacrifice","redemption","father son relationship","mother daughter relationship","grief"]},
+  wired:      {labels:["heist","spy","mind-bending","cyberpunk","martial-arts","revenge","survival"], genres:["Action","Thriller"], kw:["chase","car chase","one night","adrenaline","assassin"]},
+  satisfied:  {labels:["whodunit","murder-mystery","courtroom","heist","detective","western","revenge"], genres:["Mystery","Crime"], kw:["twist","plot twist","justice","con artist"]},
+  puzzled:    {labels:["mind-bending","experimental","time-travel","anthology"], genres:["Mystery","Sci-Fi"], kw:["dream","nonlinear timeline","surreal","memory","identity","unreliable narrator"]},
+  "delighted-by-the-mess": {labels:["b-horror","cult-classic","creature-feature","so-bad-its-good"], genres:["Horror","Sci-Fi"], kw:["camp","b movie","cult film","giant monster","splatter"], trash:true},
+};
+const ASKABLE = ["unsettled","wrecked","shaken","hollow","warm","moved","cosy","giddy","wired","satisfied","puzzled","delighted-by-the-mess"];
+const GENRES = ["Horror","Thriller","Comedy","Drama","Action","Sci-Fi","Romance","Animation","Crime","Mystery","Fantasy","Documentary"];
+const LENGTH = {short: "under 100 min", any: "whatever", long: "long is fine"};
+const ERA = {any: "any era", recent: "recent (2015+)", "2000s": "2000s–2010s", "90s": "80s–90s", classic: "classics (before 1980)"};
+
+let META = null, LIVE = false, BOT = false;
+let S = { mode: null, members: [], turn: 0, deck: null, swipes: {}, room: null, me: null, poll: null };
+
+// ---- boot ----------------------------------------------------------------------
+async function boot(){
+  META = await api("/api/meta");
+  try { await api("/api/room/PING"); } catch (e) { LIVE = !/no route/i.test(e.message) && !/HTTP 404/.test(e.message) && /no such room/i.test(e.message); }
+  BOT = LIVE;   // rooms and bot live on the same server
+  const h = location.hash.slice(1);
+  if (h.startsWith("room/")) { S.mode = "live"; joinScreen(h.slice(5)); return; }
+  home();
+}
+
+function home(){
+  clearInterval(S.poll); S = { mode: null, members: [], turn: 0, deck: null, swipes: {}, room: null, me: null, poll: null };
+  $("#main").innerHTML = `<h2>Tonight</h2><p class="sub">Say what you want to feel. Get a deck. Swipe. ${LIVE ? "" : "Two-phone rooms and the bot need the home server; on this page it's one phone."}</p>
+    <div class="menu">
+      <button data-m="solo"><b>Just me</b><span>a short deck for one</span></button>
+      <button data-m="pass"><b>Together, one phone</b><span>everyone answers and swipes in turn, first film you all want is the match</span></button>
+      <button data-m="live" class="${LIVE ? "" : "off"}" ${LIVE ? "" : "disabled"}><b>Together, our own phones</b><span>${LIVE ? "a 4-letter room code, swipe at the same time" : "needs the home server (wifi or meshnet)"}</span></button>
+      <button data-m="bot" class="${BOT ? "" : "off"}" ${BOT ? "" : "disabled"}><b>Ask the critic</b><span>${BOT ? "a question, answered from the notes" : "needs the home server"}</span></button>
+    </div>`;
+  $("#main").querySelectorAll("[data-m]").forEach(b => b.onclick = () => start(b.dataset.m));
+}
+
+function start(mode){
+  S.mode = mode;
+  if (mode === "bot") return botScreen();
+  if (mode === "live") return liveStart();
+  whoScreen();
+}
+
+// ---- who's watching ------------------------------------------------------------
+function whoChips(selected){
+  const cs = META.curators.map(c => `<span class="chip ${selected.includes(c.name) ? "on" : ""}" data-n="${esc(c.name)}" data-c="${c.id}">${esc(c.name)}</span>`).join("");
+  return `<div class="who" id="who">${cs}</div><div style="margin-top:10px"><input type="text" id="guest" placeholder="${S.mode === "solo" ? "or your name" : "add a friend's name, Enter"}"></div>`;
+}
+
+function whoScreen(){
+  const solo = S.mode === "solo";
+  $("#main").innerHTML = `<h2>${solo ? "Who's watching?" : "Who's in?"}</h2><p class="sub">${solo ? "Pick yourself if you're a curator: films you've seen are left out and your taste counts." : "Curators get their taste counted and their seen films left out. Friends just answer the questions."}</p>
+    ${whoChips([])}<div class="members" id="members"></div>
+    <div class="bar"><button id="back">back</button><button class="primary" id="go" disabled>next</button></div>`;
+  const picked = [];
+  const render = () => { $("#members").innerHTML = picked.map(p => `<span>${esc(p.name)}</span>`).join(""); $("#go").disabled = picked.length < (solo ? 1 : 2); };
+  $("#who").onclick = e => { const c = e.target.closest(".chip"); if (!c) return;
+    const i = picked.findIndex(p => p.name === c.dataset.n);
+    if (i >= 0) { picked.splice(i, 1); c.classList.remove("on"); } else { if (solo) { picked.length = 0; $("#who").querySelectorAll(".chip").forEach(x => x.classList.remove("on")); } picked.push({name: c.dataset.n, curator: c.dataset.c}); c.classList.add("on"); }
+    render(); };
+  $("#guest").onkeydown = e => { if (e.key !== "Enter" || !e.target.value.trim()) return; const n = e.target.value.trim(); if (!picked.find(p => p.name === n)) { if (solo) picked.length = 0; picked.push({name: n, curator: null}); } e.target.value = ""; render(); };
+  $("#back").onclick = home;
+  $("#go").onclick = () => { S.members = picked.map(p => ({...p, answers: null})); S.turn = 0; askScreen(); };
+}
+
+// ---- the questions ---------------------------------------------------------------
+function askScreen(){
+  const m = S.members[S.turn];
+  const feel = ASKABLE.filter(f => META.feelings ? META.feelings.some(x => x.name === f) : true);
+  $("#main").innerHTML = `<h2>${esc(m.name)}, what do you want to feel at the end?</h2><p class="sub">Pick one or two. Everything else is optional.</p>
+    <div class="q"><div class="chips" id="feel">${feel.map(f => `<span class="chip" data-v="${f}">${f.replace(/-/g, " ")}</span>`).join("")}</div></div>
+    <div class="q"><label>a genre you're in the mood for (optional)</label><div class="chips" id="genre">${GENRES.map(g => `<span class="chip" data-v="${g}">${g}</span>`).join("")}</div></div>
+    <div class="q"><label>length</label><div class="chips" id="len">${Object.entries(LENGTH).map(([k, v]) => `<span class="chip ${k === "any" ? "on" : ""}" data-v="${k}">${v}</span>`).join("")}</div></div>
+    <div class="q"><label>era</label><div class="chips" id="era">${Object.entries(ERA).map(([k, v]) => `<span class="chip ${k === "any" ? "on" : ""}" data-v="${k}">${v}</span>`).join("")}</div></div>
+    <div class="q"><label>tonight</label><div class="chips" id="risk"><span class="chip on" data-v="safe">safe bet</span><span class="chip" data-v="surprise">surprise me</span></div></div>
+    <div class="bar"><button id="back">back</button><button class="primary" id="go" disabled>${S.turn < S.members.length - 1 ? "next: " + esc(S.members[S.turn + 1].name) : "deal the deck"}</button></div>`;
+  const multi = (id, max) => { $("#" + id).onclick = e => { const c = e.target.closest(".chip"); if (!c) return;
+    const on = [...$("#" + id).querySelectorAll(".chip.on")];
+    if (c.classList.contains("on")) c.classList.remove("on"); else { if (on.length >= max) on[0].classList.remove("on"); c.classList.add("on"); }
+    $("#go").disabled = !$("#feel").querySelector(".chip.on"); }; };
+  const single = id => { $("#" + id).onclick = e => { const c = e.target.closest(".chip"); if (!c) return; $("#" + id).querySelectorAll(".chip").forEach(x => x.classList.remove("on")); c.classList.add("on"); }; };
+  multi("feel", 2); multi("genre", 2); single("len"); single("era"); single("risk");
+  $("#back").onclick = () => { if (S.turn > 0) { S.turn--; askScreen(); } else if (S.mode === "live") home(); else whoScreen(); };
+  $("#go").onclick = async () => {
+    const pick = id => [...$("#" + id).querySelectorAll(".chip.on")].map(c => c.dataset.v);
+    m.answers = { feel: pick("feel"), genre: pick("genre"), len: pick("len")[0] || "any", era: pick("era")[0] || "any", risk: pick("risk")[0] || "safe" };
+    if (S.mode === "live") return liveAnswered(m);
+    if (S.turn < S.members.length - 1) { S.turn++; askScreen(); return; }
+    await dealAndSwipe();
+  };
+}
+
+// ---- the engine --------------------------------------------------------------------
+// One engine for every mode. Gathers candidates per person from the catalogue API (labels, genres),
+// scores them per person, combines so nobody hates it, writes the reasons.
+async function tasteOf(member){
+  if (!member.curator) return null;
+  const r = await api(`/api/films?curator=${member.curator}&status=seen&limit=500&sort=updated`);
+  const seen = new Set(), dirs = {}, labs = {}, notes = {};
+  for (const f of r.films) {
+    seen.add(f.tconst);
+    const s = (f.score ?? null) !== null ? f.score / 10 : 0;
+    if (f.reached || f.about || f.note) notes[f.tconst] = f;
+    for (const d of parts(f.directors)) dirs[d] = (dirs[d] || 0) + s;
+    for (const l of parts(f.labels)) labs[l] = (labs[l] || 0) + s;
+  }
+  return { seen, dirs, labs, notes, n: r.films.length };
+}
+
+async function candidates(members){
+  const want = new Set(), urls = new Set();
+  for (const m of members) {
+    for (const f of m.answers.feel) { const h = FEEL[f] || {}; (h.labels || []).forEach(l => want.add("label=" + encodeURIComponent(l))); (h.genres || []).forEach(g => want.add("genre=" + encodeURIComponent(g))); }
+    for (const g of m.answers.genre) want.add("genre=" + encodeURIComponent(g));
+  }
+  const cur = members.find(m => m.curator)?.curator || META.curator;
+  for (const w of want) { urls.add(`/api/films?${w}&curator=${cur}&limit=${w.startsWith("label") ? 120 : 200}&sort=${w.startsWith("label") ? "votes" : "rating"}`); }
+  const seen = new Map();
+  await Promise.all([...urls].map(async u => { try { const r = await api(u); for (const f of r.films) seen.set(f.tconst, f); } catch {} }));
+  return [...seen.values()];
+}
+
+function scoreFor(f, m, taste){
+  const a = m.answers, why = [];
+  let s = 0;
+  const labels = new Set([...parts(f.labels), ...parts(f.labels_auto)]), genres = new Set(parts(f.genres)), kws = new Set(parts(f.keywords).map(k => k.toLowerCase()));
+  let trash = false;
+  for (const feel of a.feel) {
+    const h = FEEL[feel]; if (!h) continue; if (h.trash) trash = true;
+    const lh = (h.labels || []).filter(l => labels.has(l)), kh = (h.kw || []).filter(k => kws.has(k)), gh = (h.genres || []).filter(g => genres.has(g));
+    const pts = Math.min(6, lh.length * 2 + kh.length * 1.5 + gh.length * 0.8);
+    s += pts;
+    if (lh.length) why.push(`${feel.replace(/-/g, " ")} → ${lh.slice(0, 2).join(", ")}`); else if (kh.length) why.push(`${feel.replace(/-/g, " ")} → ${kh.slice(0, 2).join(", ")}`);
+  }
+  if (a.genre.length) { const hit = a.genre.filter(g => genres.has(g)); if (hit.length) { s += 2; } else s *= 0.35; }
+  const rt = f.runtime || 100;
+  if (a.len === "short") s += rt <= 100 ? 1 : rt > 130 ? -3 : -1;
+  if (a.len === "long") s += rt >= 140 ? 0.5 : 0;
+  const y = f.year || 2000;
+  const eraOk = {any: true, recent: y >= 2015, "2000s": y >= 2000 && y < 2015, "90s": y >= 1980 && y < 2000, classic: y < 1980}[a.era];
+  if (!eraOk) s -= 4;
+  if (trash) { s += f.rating < 6.5 ? 1.5 : -1; }
+  else { s += (f.rating - 6.5) * (a.risk === "safe" ? 1.2 : 0.4); if (a.risk === "safe" && f.rating < 6.5) s -= 3; }
+  if (a.risk === "surprise") s -= Math.log10(Math.max(1, f.votes)) * 0.5; else s += Math.log10(Math.max(1, f.votes)) * 0.25;
+  if (taste) {
+    if (taste.seen.has(f.tconst)) return { s: -99, why: ["already seen"] };
+    for (const d of parts(f.directors)) if (taste.dirs[d]) { s += 2 * taste.dirs[d]; why.push(`${taste.dirs[d] > 0 ? "likes" : "didn't like"} ${d}`); }
+    let lb = 0; for (const l of labels) if (taste.labs[l]) lb += taste.labs[l]; if (lb) s += Math.max(-2, Math.min(2, lb));
+  }
+  return { s, why: why.slice(0, 3) };
+}
+
+function noteReasons(f, tastes){
+  const out = [];
+  for (const [name, t] of tastes) { const n = t?.notes?.[f.tconst]; if (!n) continue;
+    const txt = n.reached || n.about || n.note; const sc = n.score != null ? ` (${n.score > 0 ? "+" : ""}${n.score})` : "";
+    out.push({ who: name, text: `${txt}`.slice(0, 220) + sc }); }
+  return out;
+}
+
+async function buildDeck(members, size = 20){
+  const tastes = new Map();
+  for (const m of members) tastes.set(m.name, await tasteOf(m));
+  const cands = await candidates(members);
+  const scored = [];
+  for (const f of cands) {
+    const per = members.map(m => ({ m, ...scoreFor(f, m, tastes.get(m.name)) }));
+    if (per.some(p => p.s <= 0)) continue;
+    const ss = per.map(p => p.s), combined = Math.min(...ss) + 0.5 * ss.reduce((a, b) => a + b, 0) / ss.length;
+    scored.push({ f, combined, per });
+  }
+  scored.sort((a, b) => b.combined - a.combined);
+  const deck = [], perDir = {};
+  for (const x of scored) {
+    const d = parts(x.f.directors)[0] || x.f.tconst;
+    if ((perDir[d] || 0) >= 2) continue; perDir[d] = (perDir[d] || 0) + 1;
+    deck.push(card(x, members, tastes));
+    if (deck.length >= size) break;
+  }
+  return deck;
+}
+
+function card(x, members, tastes){
+  const f = x.f;
+  const why = x.per.map(p => ({ who: p.m.name, text: p.why.join(" · ") })).filter(w => w.text);
+  // a curator's own words beat the engine's reasons when they exist (any curator, even one not watching)
+  const notes = noteReasons(f, [...META.curators.map(c => [c.name, null]), ...tastes]).filter(n => n.text);
+  return { tconst: f.tconst, title: f.title, year: f.year, runtime: f.runtime, rating: f.rating, rt: f.rt, poster: f.poster, overview: f.overview,
+    directors: f.directors, labels: [...new Set([...parts(f.labels), ...parts(f.labels_auto)])].slice(0, 5), in_library: f.in_library, why, notes, score: Math.round(x.combined * 10) / 10 };
+}
+
+// ---- dealing and swiping (solo + one phone) ---------------------------------------
+async function dealAndSwipe(){
+  $("#main").innerHTML = `<h2>Dealing…</h2><p class="sub">reading the catalogue for ${S.members.map(m => esc(m.name)).join(" and ")}</p>`;
+  try { S.deck = await buildDeck(S.members, S.mode === "solo" ? 12 : 20); }
+  catch (e) { $("#main").innerHTML = `<h2>Couldn't deal</h2><p class="err">${esc(e.message)}</p><div class="bar"><button id="back">back</button></div>`; $("#back").onclick = home; return; }
+  if (!S.deck.length) { $("#main").innerHTML = `<h2>Nothing fits all of that</h2><p class="sub">Try fewer constraints: one feeling, no genre, any era.</p><div class="bar"><button id="back">again</button></div>`; $("#back").onclick = () => { S.turn = 0; askScreen(); }; return; }
+  S.turn = 0; S.swipes = {}; S.i = 0;
+  swipeScreen();
+}
+
+function cardHtml(c, i, n){
+  return `<div class="count">${i + 1} / ${n}</div><div class="card" id="card">
+      <div class="stamp yes">YES</div><div class="stamp no">NOPE</div>
+      <div class="img">${c.poster ? `<img src="${IMG}${c.poster}" alt="">` : `<span>${esc(c.title)}</span>`}</div>
+      <div class="body"><h3>${esc(c.title)} <span style="color:var(--mute);font-weight:400">(${c.year})</span></h3>
+        <div class="meta">${esc(c.directors || "")} · ${c.runtime || "?"} min · ★ ${c.rating}${c.rt != null ? ` · 🍅 ${c.rt}` : ""}${c.in_library ? ' · <span style="color:#7fb3e6">on Plex</span>' : ""}</div>
+        ${c.notes.map(w => `<div class="why p"><b>${esc(w.who)}:</b> ${esc(w.text)}</div>`).join("")}
+        ${c.why.map(w => `<div class="why"><b>${esc(w.who)}</b> · ${esc(w.text)}</div>`).join("")}
+        <div class="ovw">${esc(c.overview || "")}</div>
+        <div class="labels">${c.labels.map(esc).join(" · ")}</div>
+      </div></div>`;
+}
+
+function swipeScreen(){
+  const m = S.members[S.turn], c = S.deck[S.i];
+  if (!c) { if (S.mode !== "solo" && S.turn < S.members.length - 1) { S.turn++; S.i = 0; handOver(); return; } return results(); }
+  $("#main").innerHTML = `<h2 style="font-size:16px;color:var(--mute);margin:0 0 8px">${esc(m.name)} ${S.mode === "solo" ? "" : "swipes"}</h2>` + cardHtml(c, S.i, S.deck.length) +
+    `<div class="swipe"><button class="no" id="no">✕ nope</button><button class="yes" id="yes">♥ yes</button></div>
+     <div class="count" style="margin-top:14px"><a href="#" id="quit" style="color:var(--mute)">stop</a></div>`;
+  const go = yes => { $("#card").classList.add(yes ? "yes" : "no"); (S.swipes[m.name] ||= {})[c.tconst] = yes; setTimeout(() => { S.i++; swipeScreen(); }, 180); };
+  $("#no").onclick = () => go(false); $("#yes").onclick = () => go(true);
+  $("#quit").onclick = e => { e.preventDefault(); results(); };
+  document.onkeydown = e => { if (e.key === "ArrowLeft") go(false); if (e.key === "ArrowRight") go(true); };
+}
+
+function handOver(){
+  const m = S.members[S.turn];
+  $("#main").innerHTML = `<h2>Hand the phone to ${esc(m.name)}</h2><p class="sub">Same deck, your turn. The other answers stay hidden.</p><div class="bar"><button class="primary" id="go">I'm ${esc(m.name)}</button></div>`;
+  $("#go").onclick = swipeScreen;
+}
+
+function results(){
+  document.onkeydown = null;
+  const names = S.members.map(m => m.name);
+  const yesAll = S.deck.filter(c => names.every(n => S.swipes[n]?.[c.tconst]));
+  const yesSome = S.deck.filter(c => names.some(n => S.swipes[n]?.[c.tconst]) && !yesAll.includes(c));
+  const top = yesAll[0];
+  $("#main").innerHTML = (top ? `<div class="match"><h2>${S.mode === "solo" ? "Tonight" : "It's a match"}</h2><p class="sub">${S.mode === "solo" ? "your first yes" : names.join(" and ") + " both said yes"}</p>${cardHtml(top, 0, 1).replace(/<div class="count">.*?<\/div>/, "")}</div>`
+      : `<h2>No match${S.mode === "solo" ? "" : " yet"}</h2><p class="sub">${yesSome.length ? "Nobody agreed. These got one yes:" : "Nothing got a yes."}</p>`) +
+    (yesAll.length > 1 ? `<h3 style="margin-top:22px">Also both yes</h3>` + yesAll.slice(1).map(c => `<div class="why"><b>${esc(c.title)}</b> (${c.year})</div>`).join("") : "") +
+    (yesSome.length && !top ? yesSome.slice(0, 6).map(c => `<div class="why"><b>${esc(c.title)}</b> (${c.year}) · ${names.filter(n => S.swipes[n]?.[c.tconst]).join(", ")}</div>`).join("") : "") +
+    `<div class="bar"><button id="again">new deck</button><button class="primary" id="home">done</button></div>`;
+  $("#again").onclick = () => { S.turn = 0; askScreen(); }; $("#home").onclick = home;
+}
+
+// ---- live rooms (two or more phones) ----------------------------------------------
+function liveStart(){
+  $("#main").innerHTML = `<h2>Our own phones</h2><p class="sub">One of you makes the room; the others type the code.</p>
+    <div class="q"><label>your name</label>${whoChips([])}</div>
+    <div class="menu"><button id="make"><b>Make a room</b><span>you'll get a 4-letter code</span></button></div>
+    <div class="q"><label>or join one</label><input type="text" id="code" placeholder="CODE" style="letter-spacing:6px;text-transform:uppercase"></div>
+    <div class="bar"><button id="back">back</button><button class="primary" id="join">join</button></div>`;
+  let me = null;
+  $("#who").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; $("#who").querySelectorAll(".chip").forEach(x => x.classList.remove("on")); c.classList.add("on"); me = {name: c.dataset.n, curator: c.dataset.c}; $("#guest").value = ""; };
+  $("#guest").oninput = e => { if (e.target.value.trim()) { $("#who").querySelectorAll(".chip").forEach(x => x.classList.remove("on")); me = {name: e.target.value.trim(), curator: null}; } };
+  const need = () => { if (!me) { alert("pick or type your name first"); return false; } return true; };
+  $("#make").onclick = async () => { if (!need()) return; S.me = me; const r = await api("/api/room", {name: me.name}); S.room = r; location.hash = "room/" + r.code; lobby(); };
+  $("#join").onclick = async () => { if (!need()) return; const code = $("#code").value.trim().toUpperCase(); if (code.length !== 4) return; S.me = me; try { S.room = await api(`/api/room/${code}/join`, {name: me.name}); } catch (e) { alert(e.message); return; } location.hash = "room/" + code; lobby(); };
+  $("#back").onclick = () => { location.hash = ""; home(); };
+}
+
+function joinScreen(code){
+  $("#main").innerHTML = `<h2>Join room <span style="color:var(--acc)">${esc(code)}</span></h2><p class="sub">who are you?</p>${whoChips([])}<div class="bar"><button id="back">back</button><button class="primary" id="go">join</button></div>`;
+  let me = null;
+  $("#who").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; $("#who").querySelectorAll(".chip").forEach(x => x.classList.remove("on")); c.classList.add("on"); me = {name: c.dataset.n, curator: c.dataset.c}; };
+  $("#guest").oninput = e => { if (e.target.value.trim()) me = {name: e.target.value.trim(), curator: null}; };
+  $("#back").onclick = () => { location.hash = ""; home(); };
+  $("#go").onclick = async () => { if (!me) return; S.me = me; try { S.room = await api(`/api/room/${code}/join`, {name: me.name}); } catch (e) { alert(e.message); return; } lobby(); };
+}
+
+function lobby(){
+  const r = S.room, mine = r.members.find(m => m.name === S.me.name);
+  const share = `${location.origin}${location.pathname}#room/${r.code}`;
+  $("#main").innerHTML = `<h2>Room</h2><div class="code">${r.code}</div><p class="sub" style="text-align:center">others join at <b>${esc(location.host)}${esc(location.pathname)}</b> with this code${LIVE ? `<br><a href="${share}" style="color:var(--mute)">or this link</a>` : ""}</p>
+    <div class="members" id="members"></div>
+    <div class="bar"><button id="leave">leave</button><button class="primary" id="answer">${mine.answers ? "waiting for the others…" : "answer my questions"}</button></div>`;
+  const render = () => { $("#members").innerHTML = S.room.members.map(m => `<span class="${m.answers ? "done" : ""}">${esc(m.name)}${m.answers ? " ✓" : ""}</span>`).join(""); };
+  render();
+  $("#leave").onclick = () => { location.hash = ""; home(); };
+  $("#answer").onclick = () => { if (mine.answers) return; S.members = [ {...S.me, answers: null} ]; S.turn = 0; askScreen(); };
+  clearInterval(S.poll);
+  S.poll = setInterval(async () => {
+    try { S.room = await api(`/api/room/${r.code}`); } catch { return; }
+    render();
+    const all = S.room.members.length >= 2 && S.room.members.every(m => m.answers);
+    if (S.room.deck) { clearInterval(S.poll); liveSwipe(); return; }
+    if (all && S.room.members[0].name === S.me.name) {   // the room's first member deals, once
+      clearInterval(S.poll);
+      $("#main").innerHTML = `<h2>Dealing…</h2><p class="sub">for ${S.room.members.map(m => esc(m.name)).join(", ")}</p>`;
+      const members = S.room.members.map(m => ({ name: m.name, curator: META.curators.find(c => c.name === m.name)?.id || null, answers: m.answers }));
+      const deck = await buildDeck(members, 20);
+      S.room = await api(`/api/room/${r.code}/deck`, {deck});
+      liveSwipe();
+    }
+  }, 2000);
+}
+
+async function liveAnswered(m){
+  S.room = await api(`/api/room/${S.room.code}/answers`, {name: m.name, answers: m.answers});
+  lobby();
+}
+
+function liveSwipe(){
+  const r = S.room; S.deck = r.deck; S.i = 0;
+  const mine = r.swipes[S.me.name] || {};
+  while (S.deck[S.i] && mine[S.deck[S.i].tconst] !== undefined) S.i++;
+  const show = () => {
+    if (S.room.match) return liveMatch();
+    const c = S.deck[S.i];
+    if (!c) { $("#main").innerHTML = `<h2>You're through the deck</h2><p class="sub">waiting for ${esc(S.room.members.filter(m => m.name !== S.me.name).map(m => m.name).join(", "))}…</p><div class="bar"><button id="home">leave</button></div>`; $("#home").onclick = () => { clearInterval(S.poll); location.hash = ""; home(); }; return; }
+    $("#main").innerHTML = `<h2 style="font-size:16px;color:var(--mute);margin:0 0 8px">${esc(S.me.name)} · room ${r.code}</h2>` + cardHtml(c, S.i, S.deck.length) +
+      `<div class="swipe"><button class="no" id="no">✕ nope</button><button class="yes" id="yes">♥ yes</button></div>`;
+    const go = async yes => { $("#card").classList.add(yes ? "yes" : "no"); S.room = await api(`/api/room/${r.code}/swipe`, {name: S.me.name, tconst: c.tconst, yes}); S.i++; show(); };
+    $("#no").onclick = () => go(false); $("#yes").onclick = () => go(true);
+    document.onkeydown = e => { if (e.key === "ArrowLeft") go(false); if (e.key === "ArrowRight") go(true); };
+  };
+  clearInterval(S.poll);
+  S.poll = setInterval(async () => { try { S.room = await api(`/api/room/${r.code}`); } catch { return; } if (S.room.match) { clearInterval(S.poll); liveMatch(); } }, 2000);
+  show();
+}
+
+function liveMatch(){
+  document.onkeydown = null; clearInterval(S.poll);
+  const c = S.deck.find(x => x.tconst === S.room.match);
+  $("#main").innerHTML = `<div class="match"><h2>It's a match</h2><p class="sub">${S.room.members.map(m => esc(m.name)).join(" and ")} all said yes</p>${cardHtml(c, 0, 1).replace(/<div class="count">.*?<\/div>/, "")}</div>
+    <div class="bar"><button class="primary" id="home">done</button></div>`;
+  $("#home").onclick = () => { location.hash = ""; home(); };
+}
+
+// ---- the bot -------------------------------------------------------------------------
+function botScreen(){
+  $("#main").innerHTML = `<h2>Ask the critic</h2><p class="sub">Answers come from the curators' notes only. The fewer notes, the more it will say "I don't know yet".</p>
+    <div class="bot"><textarea id="q" placeholder="Something like Hereditary but faster. Under two hours. Nothing with kids in danger."></textarea>
+    <div style="display:flex;gap:10px;margin-top:10px"><button class="primary" id="ask">ask</button><button id="back">back</button></div><div id="ans"></div></div>`;
+  $("#back").onclick = home;
+  $("#ask").onclick = async () => {
+    const q = $("#q").value.trim(); if (!q) return;
+    $("#ask").disabled = true; $("#ans").innerHTML = `<div class="ans muted">reading the notes…</div>`;
+    try { const r = await api("/api/bot", {question: q}); $("#ans").innerHTML = `<div class="ans">${esc(r.answer)}</div>`; }
+    catch (e) { $("#ans").innerHTML = `<div class="ans err">${esc(e.message)}</div>`; }
+    $("#ask").disabled = false;
+  };
+}
+
+boot().catch(e => { $("#main").innerHTML = `<h2>Couldn't start</h2><p class="err">${esc(e.message)}</p>`; });
+</script>
+</body>
+</html>

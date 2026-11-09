@@ -55,6 +55,12 @@ def main():
         raise SystemExit("could not find the app <script> in static/index.html")
     html = html.replace("<title>", "<title>", 1)
     open(os.path.join(DOCS, "index.html"), "w", encoding="utf-8").write(html)
+    # the match room: same shim in front; rooms and the bot answer 404 here, so the page falls back to one-phone mode
+    m = open(os.path.join(HERE, "static", "match.html"), encoding="utf-8").read()
+    m, k = re.subn(r"<script>\s*\nconst IMG", tag + "\nconst IMG", m, count=1)
+    if k != 1:
+        raise SystemExit("could not find the app <script> in static/match.html")
+    open(os.path.join(DOCS, "match.html"), "w", encoding="utf-8").write(m)
     print(f"docs/: {n} films, {p} in the pool, {l} lists, db {len(raw)//1_000_000} MB -> {os.path.getsize(os.path.join(DOCS,'data','films.db.gz'))//1_000_000} MB gz, shim v{v}")
 
 
