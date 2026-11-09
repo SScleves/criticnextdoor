@@ -11,6 +11,27 @@ a fixed shape, and answer "which did you like more?" pairs. Two curators, no log
 Everything you type is versioned and exported: that's the input for the recommender
 (phase 2) and the swipe room (phase 3).
 
+## Something to watch (the match room)
+
+`/match` on the local server, https://sscleves.github.io/criticnextdoor/match.html online.
+The product the labels are for: say what you want to feel at the end, get a deck, swipe.
+
+- **Just me** — a 12-card deck for one.
+- **Together, one phone** — everyone answers in turn, everyone swipes the same deck in turn,
+  first film all of you said yes to is the match.
+- **Together, our own phones** — a 4-letter room code; each answers and swipes on their own
+  phone, the server calls the match. Needs the local server (`rooms.py`): wifi or meshnet for
+  now, a domain + tunnel to open it to friends elsewhere.
+- **Ask the critic** — a question answered by Claude from `exports/notes_*.md` only, through
+  the CLI logged in on this machine (no API key). With few notes it says so.
+
+One engine (`static/match.html`), used by every mode: a feeling points at labels, TMDB keywords
+and genres (`FEEL` at the top of the file; the auto labels from `seed_labels.py` make this work
+before anyone has written a note); each person's answers score every candidate, curators also
+get their taste counted (liked directors and labels) and their seen films left out; the deck is
+what nobody hates (min + mean). A curator's own `reached` note on a film is printed on the card
+in their colour; the engine's reasons otherwise. As you label and write, the cards change.
+
 ## Run it
 
 ```bash
