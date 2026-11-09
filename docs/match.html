@@ -313,7 +313,7 @@ function swipeScreen(){
      <div class="count" style="margin-top:14px"><a href="#" id="quit" style="color:var(--mute)">stop</a></div>`;
   const go = yes => { $("#card").classList.add(yes ? "yes" : "no"); (S.swipes[m.name] ||= {})[c.tconst] = yes; setTimeout(() => { S.i++; swipeScreen(); }, 180); };
   $("#no").onclick = () => go(false); $("#yes").onclick = () => go(true);
-  $("#quit").onclick = e => { e.preventDefault(); results(); };
+  $("#quit").onclick = e => { e.preventDefault(); if (S.mode !== "solo" && S.turn < S.members.length - 1) { S.turn++; S.i = 0; handOver(); } else results(); };
   document.onkeydown = e => { if (e.key === "ArrowLeft") go(false); if (e.key === "ArrowRight") go(true); };
 }
 
