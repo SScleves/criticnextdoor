@@ -21,6 +21,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DB = os.environ.get("FILMCAT_DB", os.path.join(HERE, "films.db"))
 EXPORTS = os.environ.get("FILMCAT_EXPORTS", os.path.join(HERE, "exports"))
 app = FastAPI(title="critic next door")
+from rooms import router as rooms_router  # noqa: E402  (the match room: /match, /api/room*, /api/bot)
+app.include_router(rooms_router)
 
 FILM_COLS = ("f.tconst,f.title,f.year,f.decade,f.runtime,f.genres,f.rating,f.votes,f.directors,f.writers,"
              "f.poster,f.overview,f.countries,f.language,f.keywords,f.in_library,f.rt,f.metacritic,"
